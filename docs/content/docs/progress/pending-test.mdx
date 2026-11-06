@@ -7,6 +7,8 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- 本机图片专用配置：首次打开仅出现本机生图服务，图片继续走服务器双来源自动路由，不要求默认渠道凭据；先前误注入的文本/音频服务和未配置默认模板应移除，文本/音频/视频不自动可用。有凭据的默认渠道和显式外部渠道的模型选择应保留。
+
 - 旧版首页的「画布工作区 · 预览」应加载 Infinite；Infinite 顶栏「旧版生成」在嵌入工作区内切回原表单并保留输入，在独立访问时回到默认首页。旧版结果「插入画布」应保存成 Infinite 图片画布，不再进入 Konva。旧版仍为默认首页，切换默认须用户明确审查同意。
 
 - 本机画布编辑验收已通过：文字编辑、多选分组与解组、撤销重做、复制/删除及连线保留、拖动/缩放、新建参考连线、裁剪生成新节点与刷新恢复。提示词中心已用真实七个来源读取 1742 条，并验证自定义来源、搜索/详情、资产转工作台引用、失败缓存和刷新。产物在 image-api 的 editing-result.json 与 prompts-result.json。插件目前只读过目录，实际安装/启停和节点扩展尚未验收。用户已要求记录进度后暂停，恢复后继续剩余矩阵。
@@ -19,7 +21,7 @@ The current release needs manual verification in these areas:
 
 - image-api recovery and masks: on an image node, start generation and refresh while waiting; the existing task must fill the same node without another POST. If the submission response is lost, refresh must resolve the saved request identity before querying the task. Already failed tasks may be explicitly regenerated, while query errors must first recover the original task. The image workbench's recovery is covered above. For the local GPT Image channel, painting a region and choosing either Generate now or Export to canvas followed by manual generation should send one original reference plus an RGBA PNG mask; the server preserves pixels outside the painted area. Other channels keep the upstream blue-overlay reference workflow.
 
-- image-api integration: build with `VITE_BASE=/infinite/ VITE_IMAGE_API=1`, then serve alongside image-api. Image models should appear without entering provider secrets, generation and reference edits should use the existing async tasks, and text/voice requests should use the same-origin provider proxy. Existing external providers remain configurable. Test nested-page refresh, logos, model icons, local plugin discovery, cancellation, missing-task errors, and Settings → WebDAV synchronization to the prefilled server storage. Server sync is manual; browser persistence alone does not prove a server backup. Video providers still require a compatible configured endpoint and model.
+- image-api integration: build with `VITE_BASE=/infinite/ VITE_IMAGE_API=1`, then serve alongside image-api. Image models should appear without entering provider secrets, generation and reference edits should use the existing async tasks, and unconfigured text/voice/video capabilities must remain unavailable. Existing external providers remain configurable. Test nested-page refresh, logos, model icons, local plugin discovery, cancellation, missing-task errors, and Settings → WebDAV synchronization to the prefilled server storage. Server sync is manual; browser persistence alone does not prove a server backup. Video providers still require a compatible configured endpoint and model.
 
 - Saved model selection: save a canvas node with a model, then remove its provider or remove that model while another video model remains the default. Generation, retry and pending-video recovery should keep the unavailable model selected and open configuration instead of sending a request to the default or first provider. Re-selecting a valid model should allow generation. Changing only the API key on the same provider should preserve the model; switching a config node from a valid image model to video should still use the video default.
 
