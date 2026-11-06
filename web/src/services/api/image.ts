@@ -9,6 +9,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
+import { isImageApiChannel, requestImageApi } from "./image-api";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
@@ -693,6 +694,7 @@ function parseGeminiImagePayload(payload: GeminiPayload) {
 
 export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    if (isImageApiChannel(requestConfig.baseUrl)) return requestLocalImages(config, requestConfig, prompt, [], options);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
@@ -753,6 +755,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    if (isImageApiChannel(requestConfig.baseUrl)) return requestLocalImages(config, requestConfig, buildImageReferencePromptText(prompt, references), references, options);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const requestPrompt = buildImageReferencePromptText(prompt, references);
     const script = resolveModelScript(config, config.model || config.imageModel);
@@ -815,6 +818,29 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         return images;
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("requestFailed")));
+    }
+}
+
+async function requestLocalImages(config: AiConfig, requestConfig: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
+    const controller = new AbortController();
+    const abort = () => controller.abort(options?.signal?.reason);
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    if (options?.signal?.aborted) abort();
+    const timer = setTimeout(() => controller.abort(new Error("生成查询超时，请在原界面任务记录中查看结果，避免重复提交")), IMAGE_REQUEST_TIMEOUT_MS);
+    try {
+        const images = await Promise.all(references.map((image) => imageToDataUrl(image)));
+        return await requestImageApi({
+            sub_model: requestConfig.model,
+            prompt: withSystemPrompt(requestConfig, prompt),
+            size: resolveRequestSize(config.size),
+            n: Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1))),
+            quality: normalizeQuality(config.quality),
+            background: normalizeBackground(config.background),
+            ...(images.length ? { image_base64s: images.map((image) => image.split(",")[1]) } : {}),
+        }, controller.signal);
+    } finally {
+        clearTimeout(timer);
+        options?.signal?.removeEventListener("abort", abort);
     }
 }
 

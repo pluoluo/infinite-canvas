@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
+import { isImageApiChannel, isManagedImageApiProvider } from "@/services/api/image-api";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -209,7 +210,7 @@ export function resolveModelScript(config: AiConfig, value: string) {
 
 function isAiConfigReady(config: AiConfig, model: string) {
     const match = findChannelModel(config, model);
-    return Boolean(match && match.channel.baseUrl.trim() && match.channel.apiKey.trim());
+    return Boolean(match && match.channel.baseUrl.trim() && (match.channel.apiKey.trim() || isImageApiChannel(match.channel.baseUrl) || isManagedImageApiProvider(match.channel.baseUrl)));
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -499,6 +500,10 @@ export function normalizeLocalProxyUrl(value: string) {
 
 /** Prefix an outgoing request with the local forwarding proxy so the browser is not blocked by CORS. */
 export function withLocalProxy(url: string) {
+    if (typeof location !== "undefined") {
+        const target = new URL(url, location.origin);
+        if (target.origin === location.origin && target.pathname.startsWith("/api/v1/infinite/")) return url;
+    }
     const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
     if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;
     const base = normalizeLocalProxyUrl(proxyUrl);

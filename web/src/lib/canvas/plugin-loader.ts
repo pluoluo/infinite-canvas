@@ -117,7 +117,7 @@ export async function ensurePluginsLoaded() {
 async function loadLocalPlugins() {
     let urls: unknown;
     try {
-        const response = await fetch("/plugins/index.json");
+        const response = await fetch(`${import.meta.env.BASE_URL}plugins/index.json`);
         if (!response.ok) return;
         urls = await response.json();
     } catch {
@@ -128,6 +128,7 @@ async function loadLocalPlugins() {
     await Promise.all(
         urls.map(async (url: string) => {
             try {
+                url = new URL(url.replace(/^\//, ""), new URL(import.meta.env.BASE_URL, location.origin)).href;
                 const source = await fetchPluginSource(withCacheBust(url));
                 const plugin = await evaluatePluginSource(source);
                 const existing = store.plugins.find((item) => item.id === plugin.id);
