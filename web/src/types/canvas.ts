@@ -26,6 +26,7 @@ export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
 
 export type CanvasNodeImage = {
+    imageApiTask?: import("@/services/api/image-api").ImageApiTaskHandle;
     id: string;
     status: CanvasNodeStatus;
     errorDetails?: string;
@@ -45,6 +46,8 @@ export type CanvasNodeText = {
 };
 
 export type CanvasNodeMetadata = {
+    imageApiMask?: import("@/services/api/image-api").ImageApiMask;
+    imageApiTask?: import("@/services/api/image-api").ImageApiTaskHandle;
     content?: string;
     composerContent?: string;
     prompt?: string;

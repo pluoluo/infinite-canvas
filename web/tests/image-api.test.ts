@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { isImageApiChannel, requestImageApi } from "../src/services/api/image-api";
+import { isImageApiChannel, requestImageApi, waitForImageApiTask, type ImageApiTaskHandle } from "../src/services/api/image-api";
 
 const originalFetch = globalThis.fetch;
 const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
@@ -9,6 +9,45 @@ afterEach(() => {
     else Reflect.deleteProperty(globalThis, "location");
 });
 const input = { sub_model: "gpt-image-2.5-flare", prompt: "test", n: 2, image_base64s: ["first", "second"] };
+
+test("submission identity is durably acknowledged before POST, then task ID is recorded", async () => {
+    const handles: ImageApiTaskHandle[] = [];
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+            expect(handles.length).toBe(1);
+            expect(JSON.parse(String(init.body)).client_request_id).toBe(handles[0].clientRequestId);
+            return Response.json({ task_id: "bound-task" });
+        }
+        expect(handles[1].taskId).toBe("bound-task");
+        return Response.json({ status: "completed", images: [{ base64: "result" }] });
+    }) as typeof fetch;
+    await requestImageApi(input, new AbortController().signal, {
+        onImageApiTask: async (handle) => {
+            handles.push(handle);
+        },
+    });
+    expect(handles.length).toBe(2);
+});
+
+test("refresh resumes an existing task with no generation POST", async () => {
+    const requests: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+        requests.push(url);
+        return Response.json({ status: "completed", images: [{ base64: "existing-result" }] });
+    }) as typeof fetch;
+    await requestImageApi(input, new AbortController().signal, { imageApiTask: { clientRequestId: "identity", taskId: "existing" } });
+    expect(requests).toEqual(["/api/v1/tasks/existing"]);
+});
+
+test("an unconfirmed submission is resolved by identity after refresh without resubmitting", async () => {
+    const requests: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+        requests.push(url);
+        return Response.json(requests.length === 1 ? { task_id: "found" } : { status: "completed", images: [{ base64: "existing-result" }] });
+    }) as typeof fetch;
+    await waitForImageApiTask({ clientRequestId: "unconfirmed" }, new AbortController().signal);
+    expect(requests).toEqual(["/api/v1/submissions/unconfirmed", "/api/v1/tasks/found"]);
+});
 
 test("only the same-origin integration endpoint bypasses provider credentials", () => {
     Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "http://local.test" } });

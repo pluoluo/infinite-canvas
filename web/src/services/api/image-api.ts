@@ -38,6 +38,8 @@ type ImageApiInput = {
     quality?: string;
     background?: string;
     image_base64s?: string[];
+    mask_base64?: string;
+    preserve_outside_mask?: boolean;
 };
 type ImageTask = {
     status: "pending" | "running" | "completed" | "failed";
@@ -45,19 +47,41 @@ type ImageTask = {
     error?: string;
 };
 
+export type ImageApiTaskHandle = { clientRequestId: string; taskId?: string; failed?: boolean };
+export type ImageApiMask = { storageKey: string; source: { storageKey?: string; url?: string } };
+export type ImageApiLifecycle = { imageApiTask?: ImageApiTaskHandle; onImageApiTask?: (handle: ImageApiTaskHandle) => Promise<void>; imageApiMask?: ImageApiMask };
+
 // Use the existing async task API; polling never submits another paid request.
-export async function requestImageApi(input: ImageApiInput, signal: AbortSignal) {
+export async function requestImageApi(input: ImageApiInput, signal: AbortSignal, lifecycle: ImageApiLifecycle = {}) {
     signal.throwIfAborted();
+    let handle = lifecycle.imageApiTask;
+    if (handle) return waitForImageApiTask(handle, signal, lifecycle.onImageApiTask);
+    handle = { clientRequestId: nanoid() };
+    await lifecycle.onImageApiTask?.(handle);
     const { task_id: taskId } = await imageApiRequest<{ task_id: string }>(`${IMAGE_API_PATH}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...input, client_request_id: nanoid() }),
+        body: JSON.stringify({ ...input, client_request_id: handle.clientRequestId }),
         signal,
     });
+    handle = { ...handle, taskId };
+    await lifecycle.onImageApiTask?.(handle);
+    return waitForImageApiTask(handle, signal, lifecycle.onImageApiTask);
+}
+
+export async function waitForImageApiTask(handle: ImageApiTaskHandle, signal: AbortSignal, onTask?: ImageApiLifecycle["onImageApiTask"]) {
+    if (!handle.taskId) {
+        const found = await imageApiRequest<{ task_id: string }>(`/api/v1/submissions/${encodeURIComponent(handle.clientRequestId)}`, { signal });
+        handle = { ...handle, taskId: found.task_id };
+        await onTask?.(handle);
+    }
     while (true) {
         signal.throwIfAborted();
-        const task = await imageApiRequest<ImageTask>(`/api/v1/tasks/${encodeURIComponent(taskId)}`, { signal });
-        if (task.status === "failed") throw new Error(task.error || "生成失败");
+        const task = await imageApiRequest<ImageTask>(`/api/v1/tasks/${encodeURIComponent(handle.taskId!)}`, { signal });
+        if (task.status === "failed") {
+            await onTask?.({ ...handle, failed: true });
+            throw new Error(task.error || "生成失败");
+        }
         if (task.status === "completed") {
             if (!task.images.length) throw new Error("生成任务没有返回图片");
             return task.images.map((image) => {

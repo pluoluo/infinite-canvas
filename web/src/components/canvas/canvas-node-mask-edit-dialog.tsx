@@ -10,6 +10,7 @@ import { useImageEditorViewport } from "@/components/canvas/use-image-editor-vie
 export type CanvasImageMaskEditPayload = {
     prompt: string;
     maskDataUrl: string;
+    apiMaskDataUrl: string;
     generate: boolean;
 };
 
@@ -210,7 +211,15 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         if (!nextPrompt) return setError(t("canvas.editors.maskPromptRequired"));
         if (!canvas || !element) return;
         if (!canvasHasPaint(canvas)) return setError(t("canvas.editors.maskRequired"));
-        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), generate });
+        const apiMask = document.createElement("canvas");
+        apiMask.width = canvas.width;
+        apiMask.height = canvas.height;
+        const context = apiMask.getContext("2d")!;
+        context.fillStyle = "white";
+        context.fillRect(0, 0, apiMask.width, apiMask.height);
+        context.globalCompositeOperation = "destination-out";
+        context.drawImage(canvas, 0, 0);
+        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), apiMaskDataUrl: apiMask.toDataURL("image/png"), generate });
     };
 
     return (

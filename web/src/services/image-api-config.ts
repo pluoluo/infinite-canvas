@@ -13,12 +13,21 @@ export async function initializeImageApi() {
         baseUrl: `${location.origin}${IMAGE_API_PATH}`,
         apiKey: "",
         apiFormat: "openai",
-        models: metadata.models,
+        models: metadata.models.map((model) => ({ ...model, script: config.channels.find((item) => item.id === "image-api")?.models.find((item) => item.name === model.name)?.script })),
     };
-    const provider: ModelChannel = { ...channel, id: "image-api-openai", name: "本机文本与音频服务", baseUrl: `${channel.baseUrl}/openai`, models: metadata.provider_models };
+    const providerModels = config.channels.find((item) => item.id === "image-api-openai")?.models || [];
+    const provider: ModelChannel = {
+        ...channel,
+        id: "image-api-openai",
+        name: "本机文本与音频服务",
+        baseUrl: `${channel.baseUrl}/openai`,
+        models: [...providerModels, ...metadata.provider_models.filter((model) => !providerModels.some((item) => item.name === model.name))],
+    };
     const channels = [channel, provider, ...config.channels.filter((item) => item.id !== channel.id && item.id !== provider.id)];
     const firstModel = metadata.models[0]?.name;
-    const imageModel = config.imageModel.startsWith("image-api::") ? config.imageModel : firstModel ? `image-api::${firstModel}` : config.imageModel;
+    const defaultChannelConfigured = Boolean(config.channels.find((item) => item.id === "default")?.apiKey.trim());
+    const unconfiguredDefault = config.imageModel.startsWith("default::") && !defaultChannelConfigured;
+    const imageModel = unconfiguredDefault && firstModel ? `image-api::${firstModel}` : config.imageModel;
     useConfigStore.setState({
         config: {
             ...config,
@@ -26,8 +35,8 @@ export async function initializeImageApi() {
             models: modelOptionsFromChannels(channels),
             imageModel,
             model: imageModel,
-            textModel: config.textModel.startsWith("default::") && metadata.provider_models.length ? "image-api-openai::gpt-4.1-mini" : config.textModel,
-            audioModel: config.audioModel.startsWith("default::") && metadata.provider_models.length ? "image-api-openai::tts-1" : config.audioModel,
+            textModel: !defaultChannelConfigured && config.textModel.startsWith("default::") && metadata.provider_models.length ? "image-api-openai::gpt-4.1-mini" : config.textModel,
+            audioModel: !defaultChannelConfigured && config.audioModel.startsWith("default::") && metadata.provider_models.length ? "image-api-openai::tts-1" : config.audioModel,
         },
         webdav: webdav.url ? webdav : { ...webdav, url: `${location.origin}${IMAGE_API_PATH}/storage` },
     });
