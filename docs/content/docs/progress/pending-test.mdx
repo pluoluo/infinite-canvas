@@ -7,6 +7,9 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- image-api workbench recovery: start one or several images, refresh mid-generation, or retry after a task-status request fails. Results must return to one batch history entry without another generation POST; changed form text must not overwrite the original task metadata. A missing local result file should be downloaded again from the same server task. Browser acceptance covers these cases, lost submission responses and two-reference order. Pending jobs contain resource references and request identity, not provider credentials or embedded image bytes.
+- Legacy gallery: My Assets → Import from legacy gallery and the asset picker's Legacy gallery tab should support search, paging, load-error retry, importing, refreshing and inserting a reference. Imported originals should download with the same bytes as the server file; repeated import should not duplicate the asset. Both desktop and narrow layouts have been inspected. Fixture browser suites now require an `INFINITE_OFFLINE_VALIDATION=1` server so an interception failure cannot create a real generation request.
+
 - image-api recovery and masks: on an image node, start generation and refresh while waiting; the existing task must fill the same node without another POST. If the submission response is lost, refresh must resolve the saved request identity before querying the task. Already failed tasks may be explicitly regenerated, while query errors must first recover the original task. The image workbench's own refresh recovery is still pending. For the local GPT Image channel, painting a region and choosing either Generate now or Export to canvas followed by manual generation should send one original reference plus an RGBA PNG mask; the server preserves pixels outside the painted area. Other channels keep the upstream blue-overlay reference workflow.
 
 - image-api integration: build with `VITE_BASE=/infinite/ VITE_IMAGE_API=1`, then serve alongside image-api. Image models should appear without entering provider secrets, generation and reference edits should use the existing async tasks, and text/voice requests should use the same-origin provider proxy. Existing external providers remain configurable. Test nested-page refresh, logos, model icons, local plugin discovery, cancellation, missing-task errors, and Settings → WebDAV synchronization to the prefilled server storage. Server sync is manual; browser persistence alone does not prove a server backup. Video providers still require a compatible configured endpoint and model.
@@ -89,3 +92,5 @@ The Chinese version contains the complete item-by-item acceptance checklist.
 - 分辨率为自动时保留比例选择，比例为自动时禁用 W/H；手动输入 W/H 后，对齐开关仍应按原有方式工作。
 - Gemini 请求应带 aspectRatio（所选比例）；分辨率选了 1K / 2K / 4K 时应按尺寸表带上 imageConfig.imageSize，选自动时不带。质量不参与分辨率换算，视频尺寸设置保持原有行为。
 - 图像质量可选自动与 5 档（低 / 中 / 高 / 极高 / 最高），请求里的 quality 字段应与所选档位一致，且尺寸不随质量变化。
+
+- 画布左侧「资产 → 旧图库」可直接插入图片；插入等待原图准备完成，刷新后保留本地图片引用。

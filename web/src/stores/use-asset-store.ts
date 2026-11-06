@@ -43,6 +43,8 @@ export function assetCoverUrl(asset: Asset) {
 }
 
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
+let assetSaveQueue: Promise<void> = Promise.resolve();
+export const flushAssetStorage = () => assetSaveQueue;
 
 const assetStorage: PersistStorage<AssetStore> = {
     getItem: async (name) => {
@@ -68,7 +70,11 @@ const assetStorage: PersistStorage<AssetStore> = {
         );
         return parsed;
     },
-    setItem: (name, value) => localForageStorage.setItem(name, JSON.stringify(value)),
+    setItem: (name, value) => {
+        const serialized = JSON.stringify(value);
+        assetSaveQueue = assetSaveQueue.catch(() => undefined).then(async () => { await localForageStorage.setItem(name, serialized); });
+        return assetSaveQueue;
+    },
     removeItem: (name) => localForageStorage.removeItem(name),
 };
 

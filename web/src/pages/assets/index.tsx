@@ -11,6 +11,7 @@ import { getImageBlob, getImagePreviewRevision, subscribeImagePreviews, uploadIm
 import { cn } from "@/lib/utils";
 import { assetCoverUrl, useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
+import { ImageApiGallery } from "@/components/canvas/image-api-gallery";
 
 type AssetFormValues = {
     kind: AssetKind;
@@ -44,6 +45,7 @@ export default function AssetsPage() {
     const [pageSize, setPageSize] = useState(10);
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [isAssetOpen, setIsAssetOpen] = useState(false);
+    const [galleryOpen, setGalleryOpen] = useState(false);
     const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
     const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
     const [formKind, setFormKind] = useState<AssetKind>("text");
@@ -242,6 +244,7 @@ export default function AssetsPage() {
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-4">
+                                {import.meta.env.VITE_IMAGE_API ? <Button type="text" onClick={() => setGalleryOpen(true)}>从旧图库导入</Button> : null}
                                 <button
                                     type="button"
                                     className="cursor-pointer text-sm font-medium text-stone-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline dark:text-stone-300"
@@ -292,6 +295,10 @@ export default function AssetsPage() {
                     </div>
                 </div>
             </main>
+
+            <Modal title="从旧图库导入" open={galleryOpen} onCancel={() => setGalleryOpen(false)} footer={null} width={860} destroyOnHidden>
+                <ImageApiGallery />
+            </Modal>
 
             <Modal title={editingAsset ? t("assets.edit") : t("assets.add")} open={isAssetOpen} width={980} onCancel={() => setIsAssetOpen(false)} onOk={() => void saveAsset()} okText={t("common.save")} cancelText={t("common.cancel")} destroyOnHidden>
                 <div className="grid gap-6 pt-1 lg:grid-cols-[minmax(0,1fr)_320px]">

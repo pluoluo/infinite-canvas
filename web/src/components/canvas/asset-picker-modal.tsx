@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Empty, Input, Modal, Pagination, Tag } from "antd";
+import { Empty, Input, Modal, Pagination, Tag, Tabs } from "antd";
 import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import { getImagePreviewRevision, subscribeImagePreviews } from "@/services/image-storage";
 import { assetCoverUrl, useAssetStore, type Asset } from "@/stores/use-asset-store";
+import { ImageApiGallery } from "./image-api-gallery";
 
 export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | { kind: "video"; url: string; title: string; storageKey?: string; width?: number; height?: number };
 
@@ -20,7 +21,10 @@ export function AssetPickerModal({ open, onInsert, onClose }: Props) {
     const { t } = useTranslation();
     return (
         <Modal title={t("canvas.assetPicker.title")} open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
-            <MyAssetsTab onInsert={onInsert} />
+            {import.meta.env.VITE_IMAGE_API ? <Tabs items={[
+                { key: "assets", label: t("assets.title"), children: <MyAssetsTab onInsert={onInsert} /> },
+                { key: "gallery", label: "旧图库", children: <ImageApiGallery onInsert={onInsert} /> },
+            ]} /> : <MyAssetsTab onInsert={onInsert} />}
         </Modal>
     );
 }

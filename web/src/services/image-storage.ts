@@ -243,6 +243,9 @@ export async function deleteStoredImages(keys: Iterable<string>) {
 export async function cleanupUnusedImages(usedData: unknown) {
     const usedKeys = collectImageStorageKeys(usedData);
     await Promise.all([
+        localforage.createInstance({ name: "infinite-canvas", storeName: "image_api_workbench_jobs" }).iterate((value) => {
+            collectImageStorageKeys(value, usedKeys);
+        }),
         imageLogStore.iterate((value) => {
             collectImageStorageKeys(value, usedKeys);
         }),
