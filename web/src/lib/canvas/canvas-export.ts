@@ -14,9 +14,9 @@ export async function exportCanvasProjects(projects: CanvasProject[], fileName =
         projects.map(async (project) => {
             const files: CanvasExportAsset[] = [];
             await Promise.all(
-                collectStorageKeys(project).map(async (storageKey) => {
+                collectCanvasStorageKeys(project).map(async (storageKey) => {
                     const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-                    if (!blob) return;
+                    if (!blob) throw new Error(`Missing canvas file: ${storageKey}`);
                     const path = `projects/${project.id}/files/${safeFileName(storageKey)}.${fileExtension(blob.type, storageKey)}`;
                     files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
                     zipFiles.push({ name: path, data: blob });
@@ -64,10 +64,13 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
     saveAs(zip, `${safeFileName(fileName)}.zip`);
 }
 
-function collectStorageKeys(value: unknown, keys = new Set<string>()) {
+export function collectCanvasStorageKeys(value: unknown, keys = new Set<string>()) {
     if (!value || typeof value !== "object") return [...keys];
+    if ("references" in value && Array.isArray(value.references)) {
+        for (const reference of value.references) if (typeof reference === "string" && /^(image|video|audio|file|video-reference|audio-reference):/.test(reference)) keys.add(reference);
+    }
     if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
-    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectStorageKeys(child, keys)) : collectStorageKeys(item, keys)));
+    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectCanvasStorageKeys(child, keys)) : collectCanvasStorageKeys(item, keys)));
     return [...keys];
 }
 

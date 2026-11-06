@@ -12,7 +12,7 @@ import { CanvasProjectCard } from "@/components/canvas/canvas-project-card";
 import type { CanvasExportFile } from "@/types/canvas-export";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
-import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
+import { collectCanvasStorageKeys, exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
 
 export default function CanvasPage() {
@@ -44,19 +44,29 @@ export default function CanvasPage() {
             const projectFile = zip.get("projects.json");
             if (!projectFile) throw new Error("missing projects.json");
             const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
-            await Promise.all(
-                data.projects.flatMap((project) =>
-                    project.files.map(async (item) => {
-                        const blob = zip.get(item.path);
-                        if (!blob) return;
-                        const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
-                        await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
-                    }),
-                ),
-            );
+            if (data.app !== "infinite-canvas" || data.version !== 3 || !Array.isArray(data.projects)) throw new Error("unsupported canvas archive");
+            const files = data.projects.flatMap((project) => {
+                if (!project.project || !Array.isArray(project.project.nodes) || !Array.isArray(project.project.connections) || !Array.isArray(project.files)) throw new Error("invalid canvas project");
+                return project.files;
+            });
+            // Validate the whole archive before writing; missing resources must not silently import.
+            for (const item of files) {
+                if (!zip.has(item.path) || !/^(image|video|audio|file|video-reference|audio-reference):/.test(item.storageKey)) throw new Error("missing or invalid canvas file");
+            }
+            const included = new Set(files.map((item) => item.storageKey));
+            for (const key of collectCanvasStorageKeys(data.projects.map((item) => item.project))) {
+                if (!included.has(key)) throw new Error("canvas reference is missing from archive");
+            }
+            // Image previews and media use separate IndexedDB stores; avoid concurrent schema upgrades.
+            for (const item of files) {
+                const blob = zip.get(item.path)!;
+                const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
+                await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
+            }
             data.projects.forEach((item) => importProject(item.project));
             message.success(t("canvas.imported", { count: data.projects.length }));
-        } catch {
+        } catch (error) {
+            console.error(error);
             message.error(t("canvas.importFailed"));
         } finally {
             if (inputRef.current) inputRef.current.value = "";
@@ -82,7 +92,7 @@ export default function CanvasPage() {
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (
                             <>
-                                <Button disabled={!hydrated} icon={<Download className="size-4" />} onClick={() => void exportCanvasProjects(projects.filter((project) => selectedIds.includes(project.id)), `${t("canvas.title")}-${selectedIds.length}`)}>
+                                <Button disabled={!hydrated} icon={<Download className="size-4" />} onClick={() => void exportCanvasProjects(projects.filter((project) => selectedIds.includes(project.id)), `${t("canvas.title")}-${selectedIds.length}`).catch(() => message.error(t("canvas.sidePanel.exportFailed")))}>
                                     {t("canvas.exportSelected")}
                                 </Button>
                                 <Button disabled={!hydrated} onClick={() => setDeleteIds(selectedIds)}>

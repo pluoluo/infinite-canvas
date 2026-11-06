@@ -2,7 +2,9 @@ import { imageApiRequest } from "./image-api";
 import { uploadImage } from "@/services/image-storage";
 import { flushAssetStorage, useAssetStore } from "@/stores/use-asset-store";
 
-export type GalleryImage = { id: string; filename: string; thumb_filename?: string; image_url?: string; prompt: string; sub_model: string; created_at: string };
+export type GalleryReference = { filename: string; url: string; mime_type: string; bytes: number };
+export type GalleryInputs = { references: GalleryReference[]; mask: GalleryReference | null; preserve_source: GalleryReference | null };
+export type GalleryImage = { id: string; filename: string; thumb_filename?: string; image_url?: string; prompt: string; sub_model: string; created_at: string; inputs?: GalleryInputs | null };
 export const galleryImageUrl = (image: GalleryImage) => (image.filename ? `/gallery/${encodeURIComponent(image.filename)}` : image.image_url || "");
 export const galleryThumbnailUrl = (image: GalleryImage) => (image.thumb_filename ? `/gallery/thumb/${encodeURIComponent(image.thumb_filename)}` : galleryImageUrl(image));
 export function readImageApiGallery(page: number, pageSize: number, keyword: string) {
@@ -39,7 +41,7 @@ export async function importGalleryImage(image: GalleryImage) {
         coverUrl: stored.url,
         source: "旧图库",
         note: image.prompt,
-        metadata: { galleryId: image.id, prompt: image.prompt, model: image.sub_model, source: "image-api-gallery" },
+        metadata: { galleryId: image.id, prompt: image.prompt, model: image.sub_model, source: "image-api-gallery", inputs: image.inputs },
         data: { dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
     });
     try {
