@@ -332,6 +332,8 @@ export default {
         config: "配置",
     },
     topNav: {
+        legacyResult: "旧版生成结果",
+        legacy: "旧版生成",
         openMenu: "打开导航菜单",
         menu: "导航菜单",
         navigation: "导航",

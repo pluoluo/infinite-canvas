@@ -37,6 +37,14 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
 
     return (
         <div className="inline-flex shrink-0 items-center gap-1">
+            {import.meta.env.VITE_IMAGE_API === "1" ? (
+                <a href="/" target="_top" className="inline-flex h-7 shrink-0 items-center rounded-md px-2 text-xs text-stone-600 transition-colors hover:bg-black/5 dark:text-stone-300 dark:hover:bg-white/10" style={iconStyle} onClick={(event) => {
+                    if (window.parent !== window) {
+                        event.preventDefault();
+                        window.parent.postMessage({ type: "canvas-legacy" }, window.location.origin);
+                    }
+                }}>{t("topNav.legacy")}</a>
+            ) : null}
             {onOpenPlugins ? (
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenPlugins} aria-label={t("topNav.plugins")} title={t("topNav.plugins")}>
                     <Puzzle className="size-4" />

@@ -332,6 +332,8 @@ export default {
         config: "Settings",
     },
     topNav: {
+        legacyResult: "Legacy generation result",
+        legacy: "Legacy generator",
         openMenu: "Open navigation menu",
         menu: "Navigation menu",
         navigation: "Navigation",
