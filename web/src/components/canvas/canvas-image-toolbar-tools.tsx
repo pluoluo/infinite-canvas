@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
-import { Pencil, Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
+import { Columns2, Pencil, Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
 
 import type { CanvasNodeData } from "@/types/canvas";
 import i18n from "@/i18n";
 
-export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "annotate" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "annotate" | "compare" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
 export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | ImageNodeActionToolId;
 
 export type ImageToolHandlers = {
     onUpload: (node: CanvasNodeData) => void;
     onToggleFreeResize: (node: CanvasNodeData) => void;
+    onCompare: (node: CanvasNodeData) => void;
     onAnnotate: (node: CanvasNodeData) => void;
     onMaskEdit: (node: CanvasNodeData) => void;
     onCrop: (node: CanvasNodeData) => void;
@@ -34,6 +35,7 @@ export type ImageToolDefinition = {
 
 export type ImageQuickToolsConfig = {
     annotationVersion?: number;
+    comparisonVersion?: number;
     ids: ImageQuickToolId[];
     showLabels: boolean;
 };
@@ -75,6 +77,14 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         icon: (node) => (node.metadata?.freeResize ? <LockOpen className="size-4" /> : <Lock className="size-4" />),
         active: (node) => Boolean(node.metadata?.freeResize),
         run: (node, handlers) => handlers.onToggleFreeResize(node),
+    },
+    {
+        id: "compare",
+        defaultVisible: true,
+        label: "AB 对比",
+        title: "AB 对比",
+        icon: () => <Columns2 className="size-4" />,
+        run: (node, handlers) => handlers.onCompare(node),
     },
     {
         id: "annotate",
@@ -162,11 +172,11 @@ export function normalizeImageQuickToolIds(value: unknown[]) {
 }
 
 export function readImageQuickToolsConfig(value: unknown): ImageQuickToolsConfig {
-    if (Array.isArray(value)) return { ids: normalizeImageQuickToolIds([...value, "annotate"]), showLabels: false };
+    if (Array.isArray(value)) return { ids: normalizeImageQuickToolIds([...value, "annotate", "compare"]), showLabels: false };
     if (!value || typeof value !== "object") return { ids: defaultImageQuickToolIds, showLabels: false };
     const data = value as Partial<ImageQuickToolsConfig>;
     return {
-        ids: Array.isArray(data.ids) ? normalizeImageQuickToolIds(data.annotationVersion ? data.ids : [...data.ids, "annotate"]) : defaultImageQuickToolIds,
+        ids: Array.isArray(data.ids) ? normalizeImageQuickToolIds([...data.ids, ...(data.annotationVersion ? [] : ["annotate"]), ...(data.comparisonVersion ? [] : ["compare"])]) : defaultImageQuickToolIds,
         showLabels: data.showLabels === true,
     };
 }

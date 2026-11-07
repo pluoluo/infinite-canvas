@@ -29,6 +29,7 @@ import { CanvasConfigComposer } from "@/components/canvas/canvas-config-composer
 import { CanvasConfigNodePanel } from "@/components/canvas/canvas-config-node-panel";
 import { CanvasNodeContextMenu } from "@/components/canvas/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
+import { CanvasNodeCompareDialog } from "@/components/canvas/canvas-node-compare-dialog";
 import { CanvasNodeAnnotationDialog } from "@/components/canvas/canvas-node-annotation-dialog";
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from "@/components/canvas/canvas-node-crop-dialog";
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "@/components/canvas/canvas-node-mask-edit-dialog";
@@ -258,6 +259,9 @@ function InfiniteCanvasPage() {
     const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
     const [infoNodeId, setInfoNodeId] = useState<string | null>(null);
     const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
+    const [comparisonSourceId, setComparisonSourceId] = useState<string | null>(null);
+    const [comparisonTargetId, setComparisonTargetId] = useState<string | null>(null);
+    const pickingComparison = Boolean(comparisonSourceId && !comparisonTargetId);
     const [annotationNodeId, setAnnotationNodeId] = useState<string | null>(null);
     const [cropNodeId, setCropNodeId] = useState<string | null>(null);
     const [maskEditNodeId, setMaskEditNodeId] = useState<string | null>(null);
@@ -850,6 +854,25 @@ function InfiniteCanvasPage() {
     const toolbarCandidate = (toolbarNodeId ? nodeById.get(toolbarNodeId) || null : null) || (singleSelectedNodeId ? nodeById.get(singleSelectedNodeId) || null : null);
     const toolbarNode = toolbarCandidate && !hiddenNodeIds.has(toolbarCandidate.id) ? toolbarCandidate : null;
     const infoNode = infoNodeId ? nodeById.get(infoNodeId) || null : null;
+    const comparisonSource = comparisonSourceId ? nodeById.get(comparisonSourceId) : null;
+    const comparisonTarget = comparisonTargetId ? nodeById.get(comparisonTargetId) : null;
+    const closeComparison = () => { setComparisonSourceId(null); setComparisonTargetId(null); };
+    const selectComparisonNode = (nodeId: string) => {
+        const node = nodeById.get(nodeId);
+        if (nodeId !== comparisonSourceId && node?.type === CanvasNodeType.Image && node.metadata?.content && !hiddenNodeIds.has(nodeId)) setComparisonTargetId(nodeId);
+    };
+    useEffect(() => {
+        if (!pickingComparison) return;
+        const exit = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault(); event.stopImmediatePropagation(); setComparisonSourceId(null);
+            } else if (["Delete", "Backspace"].includes(event.key) || ((event.ctrlKey || event.metaKey) && ["a", "z", "y", "g", "v", "d"].includes(event.key.toLowerCase()))) {
+                event.preventDefault(); event.stopImmediatePropagation();
+            }
+        };
+        window.addEventListener("keydown", exit, true);
+        return () => window.removeEventListener("keydown", exit, true);
+    }, [pickingComparison]);
     const annotationNode = annotationNodeId ? nodeById.get(annotationNodeId) || null : null;
     const cropNode = cropNodeId ? nodeById.get(cropNodeId) || null : null;
     const maskEditNode = maskEditNodeId ? nodeById.get(maskEditNodeId) || null : null;
@@ -3311,7 +3334,7 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
-            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onToggleNodeVisibility={toggleNodeVisibility} onHoverNode={setHoverPreviewNodeId} onInsertAsset={handleAssetInsert} />
+            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={(nodeId) => pickingComparison ? selectComparisonNode(nodeId) : focusNode(nodeId)} onPreviewNode={setPreviewNodeId} onToggleNodeVisibility={toggleNodeVisibility} onHoverNode={setHoverPreviewNodeId} onInsertAsset={handleAssetInsert} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
@@ -3347,11 +3370,11 @@ function InfiniteCanvasPage() {
                         setContextMenu(null);
                     }}
                     onCanvasMouseDown={(event) => {
-                        if (!referencePickerNodeId) handleCanvasMouseDown(event);
+                        if (!referencePickerNodeId && !pickingComparison) handleCanvasMouseDown(event);
                     }}
-                    onCanvasDeselect={referencePickerNodeId ? undefined : deselectCanvas}
+                    onCanvasDeselect={referencePickerNodeId || pickingComparison ? undefined : deselectCanvas}
                     onCanvasDoubleClick={(event) => {
-                        if (referencePickerNodeId) return;
+                        if (referencePickerNodeId || pickingComparison) return;
                         setContextMenu(null);
                         setNodeCreatePosition(screenToCanvas(event.clientX, event.clientY));
                     }}
@@ -3391,7 +3414,8 @@ function InfiniteCanvasPage() {
                             isFocusRelated={activeNodeId === node.id}
                             isConnectionTarget={connectionTargetNodeId === node.id}
                             isConnecting={Boolean(connectingParams)}
-                            referenceSelectionState={!referencePickerNodeId ? undefined : node.id === referencePickerNodeId ? "target" : referenceConnectedNodeIds.has(node.id) || !isCanvasReferenceNode(node, nodes) ? "disabled" : "available"}
+                            referenceSelectionLabel={pickingComparison ? node.id === comparisonSourceId ? "A · 当前图片" : "选为 B 图片" : undefined}
+                            referenceSelectionState={pickingComparison ? node.id === comparisonSourceId ? "target" : node.type === CanvasNodeType.Image && node.metadata?.content ? "available" : "disabled" : !referencePickerNodeId ? undefined : node.id === referencePickerNodeId ? "target" : referenceConnectedNodeIds.has(node.id) || !isCanvasReferenceNode(node, nodes) ? "disabled" : "available"}
                             showPanel={!isNodeResizing && dialogNodeId === node.id && !selectionBox && !getNodeDefinition(node.type)?.hidePanel}
                             groupChildCount={groupChildCountById.get(node.id) || 0}
                             isGroupDropTarget={dropTargetGroupId === node.id}
@@ -3420,7 +3444,7 @@ function InfiniteCanvasPage() {
                             onDeleteBatchImage={deleteBatchImage}
                             onRetry={handleNodeRetry}
                             onViewImage={handleNodeViewImage}
-                            onSelectReference={selectNodeReference}
+                            onSelectReference={pickingComparison ? selectComparisonNode : selectNodeReference}
                             onContextMenu={handleNodeContextMenu}
                         />
                     ))}
@@ -3452,6 +3476,7 @@ function InfiniteCanvasPage() {
                     ) : null}
                 </InfiniteCanvas>
 
+                {pickingComparison ? <button type="button" className="absolute left-1/2 top-4 z-[90] max-w-[90%] -translate-x-1/2 rounded-lg px-4 py-2 text-sm" style={{ background: theme.toolbar.panel, color: theme.node.text }} onClick={closeComparison}>选择另一张图片进行 AB 对比 · 点击此处或 Esc 取消</button> : null}
                 {referencePickerNodeId ? <button type="button" className="absolute left-1/2 top-4 z-[90] -translate-x-1/2 rounded-full border px-4 py-2 text-sm font-medium shadow-lg backdrop-blur" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border }} onClick={exitNodeReferenceSelection}>{t("canvas.references.selectingHint")}</button> : null}
 
                 <div
@@ -3476,7 +3501,7 @@ function InfiniteCanvasPage() {
                 </div>
 
                 <CanvasNodeHoverToolbar
-                    node={isNodeDragging || isNodeResizing || nodeImageSettingsOpen || Boolean(referencePickerNodeId) || expandedBatchNodeIds.has(toolbarNode?.id || "") ? null : toolbarNode}
+                    node={isNodeDragging || isNodeResizing || nodeImageSettingsOpen || Boolean(referencePickerNodeId) || Boolean(comparisonSourceId) || expandedBatchNodeIds.has(toolbarNode?.id || "") ? null : toolbarNode}
                     viewport={viewport}
                     extraTools={toolbarNode ? buildNodeToolbarItems(toolbarNode) : undefined}
                     onKeep={keepNodeToolbar}
@@ -3489,6 +3514,7 @@ function InfiniteCanvasPage() {
                     onUpload={(node) => handleUploadRequest(node.id)}
                     onDownload={downloadNodeImage}
                     onSaveAsset={(node) => void saveNodeAsset(node)}
+                    onCompare={(node) => { if (!node.metadata?.content) return; setDialogNodeId(null); setReferencePickerNodeId(null); setComparisonTargetId(null); setComparisonSourceId(node.id); }}
                     onAnnotate={(node) => { setDialogNodeId(null); setAnnotationNodeId(node.id); }}
                     onMaskEdit={(node) => setMaskEditNodeId(node.id)}
                     onCrop={(node) => setCropNodeId(node.id)}
@@ -3579,6 +3605,7 @@ function InfiniteCanvasPage() {
                 <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
                 <CanvasPluginManagerModal open={pluginManagerOpen} onClose={() => setPluginManagerOpen(false)} />
 
+                {comparisonSource?.metadata?.content && comparisonTarget?.metadata?.content ? <CanvasNodeCompareDialog source={comparisonSource} target={comparisonTarget} onClose={closeComparison} /> : null}
                 {annotationNode?.metadata?.content ? <CanvasNodeAnnotationDialog key={annotationNode.id} dataUrl={annotationNode.metadata.content} onClose={() => setAnnotationNodeId(null)} onSave={(dataUrl) => annotateImageNode(annotationNode, dataUrl)} /> : null}
                 {cropNode?.metadata?.content ? <CanvasNodeCropDialog dataUrl={cropNode.metadata.content} open={Boolean(cropNode)} onClose={() => setCropNodeId(null)} onConfirm={(crop) => void cropImageNode(cropNode!, crop)} /> : null}
 
