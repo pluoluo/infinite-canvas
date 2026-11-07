@@ -83,6 +83,7 @@ export function CanvasNodePromptPanel({ node, nodes, connections, isRunning, onP
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
+            {mode === "text" ? <h3 className="mb-3 text-sm font-semibold">{t("canvas.promptPanel.aiTextTitle")}</h3> : null}
             <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <CanvasPromptChipInput
                 value={prompt}
@@ -150,7 +151,7 @@ export function CanvasNodePromptPanel({ node, nodes, connections, isRunning, onP
                     </span>
                 </Button>
             </div>
-            <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
+            <Modal title={t(mode === "text" ? "canvas.promptPanel.aiTextTitle" : "canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>
                     <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={(nodeId) => { setExpanded(false); onStartReferenceSelection?.(nodeId); }} />
                     <CanvasPromptChipInput
