@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Empty, Input, Modal, Popconfirm, Select, Spin, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronRight, Download, Eye, EyeOff, Maximize2, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Download, Eye, EyeOff, Maximize2, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Pencil, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
@@ -10,6 +10,8 @@ import { getHiddenNodeIds } from "@/lib/canvas/canvas-node-visibility";
 import { exportCanvasNodes } from "@/lib/canvas/canvas-export";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { cn } from "@/lib/utils";
+import { LocalPromptEditor } from "@/components/prompts/local-prompt-editor";
+import { LOCAL_PROMPT_CATEGORY, LOCAL_PROMPT_SOURCE_ID, useLocalPromptStore } from "@/stores/use-local-prompt-store";
 import { PromptDetailDialog } from "@/pages/prompts/components/prompt-detail-dialog";
 import { fetchSourcePrompts, type Prompt } from "@/services/api/prompts";
 import { uploadMediaFile } from "@/services/file-storage";
@@ -565,9 +567,11 @@ const CanvasPromptsTab = memo(function CanvasPromptsTab({ onInsert, theme }: { o
     const { message } = App.useApp();
     const { t } = useTranslation();
     const sources = usePromptSourceStore((state) => state.sources);
-    const enabledSources = useMemo(() => sources.filter((source) => source.enabled), [sources]);
+    const enabledSources = useMemo(() => [{ id: LOCAL_PROMPT_SOURCE_ID, name: LOCAL_PROMPT_CATEGORY }, ...sources.filter((source) => source.enabled)], [sources]);
     const [keyword, setKeyword] = useState("");
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({ [LOCAL_PROMPT_SOURCE_ID]: true });
+    const [editor, setEditor] = useState<Prompt | null>();
+    const removeLocalPrompt = useLocalPromptStore(state => state.remove);
     const [detail, setDetail] = useState<Prompt | null>(null);
 
     const copyPrompt = async (prompt: string) => {
@@ -579,10 +583,16 @@ const CanvasPromptsTab = memo(function CanvasPromptsTab({ onInsert, theme }: { o
         }
     };
 
+    const deleteLocalPrompt = async (item: Prompt) => {
+        try { await removeLocalPrompt(item.id); if (detail?.id === item.id) setDetail(null); message.success("已删除本地提示词"); }
+        catch (error) { message.error(error instanceof Error ? error.message : "删除失败，请重试"); }
+    };
+
     return (
-        <div className="flex h-full flex-col">
+        <div className="flex h-full flex-col" data-canvas-prompt-library>
             <div className="px-3 pb-2.5 pt-1">
                 <Input size="small" allowClear prefix={<Search className="size-3.5 text-stone-400" />} placeholder={t("canvas.sidePanel.searchPrompts")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+                <button type="button" className="mt-2 flex items-center gap-1.5 rounded px-1 py-1 text-xs opacity-75 hover:opacity-100" onClick={() => setEditor(null)}><Plus className="size-3.5" />新增本地提示词</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
                 <div className="space-y-1">
@@ -597,10 +607,13 @@ const CanvasPromptsTab = memo(function CanvasPromptsTab({ onInsert, theme }: { o
                             onToggle={() => setExpanded((prev) => ({ ...prev, [source.id]: !prev[source.id] }))}
                             onInsert={onInsert}
                             onView={setDetail}
+                            onEdit={source.id === LOCAL_PROMPT_SOURCE_ID ? setEditor : undefined}
+                            onDelete={source.id === LOCAL_PROMPT_SOURCE_ID ? deleteLocalPrompt : undefined}
                         />
                     )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.sidePanel.noPrompts")} className="pt-12" />}
                 </div>
             </div>
+            <LocalPromptEditor open={editor !== undefined} prompt={editor} onClose={() => setEditor(undefined)} onSaved={() => { setExpanded(prev => ({ ...prev, [LOCAL_PROMPT_SOURCE_ID]: true })); setKeyword(""); }} />
             <PromptDetailDialog prompt={detail} onClose={() => setDetail(null)} onCopy={(prompt) => void copyPrompt(prompt)} />
         </div>
     );
@@ -615,6 +628,8 @@ function PromptSourceGroup({
     onToggle,
     onInsert,
     onView,
+    onEdit,
+    onDelete,
 }: {
     sourceId: string;
     sourceName: string;
@@ -624,11 +639,14 @@ function PromptSourceGroup({
     onToggle: () => void;
     onInsert: (payload: InsertAssetPayload) => void;
     onView: (prompt: Prompt) => void;
+    onEdit?: (prompt: Prompt) => void;
+    onDelete?: (prompt: Prompt) => Promise<void>;
 }) {
     const { t } = useTranslation();
     // Cache a source after its first expansion to avoid repeated requests; search results also need the data for counts.
     const showResults = open || !!keyword.trim();
-    const query = useQuery({ queryKey: ["side-panel-prompts", sourceId], queryFn: () => fetchSourcePrompts(sourceId), enabled: showResults, staleTime: 1000 * 60 * 60 });
+    const localRevision = useLocalPromptStore(state => state.revision);
+    const query = useQuery({ queryKey: ["side-panel-prompts", sourceId, sourceId === LOCAL_PROMPT_SOURCE_ID ? localRevision : 0], queryFn: () => fetchSourcePrompts(sourceId), enabled: showResults, staleTime: 1000 * 60 * 60 });
 
     const filtered = useMemo(() => {
         const items = query.data || [];
@@ -640,7 +658,7 @@ function PromptSourceGroup({
     const insertPrompt = (item: Prompt) => onInsert({ kind: "text", content: item.prompt, title: item.title });
 
     return (
-        <div>
+        <div data-prompt-source={sourceId}>
             <button type="button" onClick={onToggle} className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-xs font-semibold opacity-75 transition hover:opacity-100">
                 <ChevronRight className={cn("size-3.5 transition-transform", showResults && "rotate-90")} />
                 <BookOpen className="size-3.5" />
@@ -660,7 +678,7 @@ function PromptSourceGroup({
                     ) : filtered.length ? (
                         <div className="space-y-1.5">
                             {filtered.map((item) => (
-                                <PromptRow key={item.id} item={item} theme={theme} onInsert={() => insertPrompt(item)} onView={() => onView(item)} />
+                                <PromptRow key={item.id} item={item} theme={theme} onInsert={() => insertPrompt(item)} onView={() => onView(item)} onEdit={onEdit ? () => onEdit(item) : undefined} onDelete={onDelete ? () => onDelete(item) : undefined} />
                             ))}
                         </div>
                     ) : (
@@ -672,10 +690,10 @@ function PromptSourceGroup({
     );
 }
 
-function PromptRow({ item, theme, onInsert, onView }: { item: Prompt; theme: CanvasTheme; onInsert: () => void; onView: () => void }) {
+function PromptRow({ item, theme, onInsert, onView, onEdit, onDelete }: { item: Prompt; theme: CanvasTheme; onInsert: () => void; onView: () => void; onEdit?: () => void; onDelete?: () => Promise<void> }) {
     const { t } = useTranslation();
     return (
-        <div className="group relative flex items-center gap-2.5 rounded-lg px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5">
+        <div data-prompt-id={item.id} className="group relative flex items-center gap-2.5 rounded-lg px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5">
             {item.coverUrl ? (
                 <img src={item.coverUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" loading="lazy" />
             ) : (
@@ -687,7 +705,7 @@ function PromptRow({ item, theme, onInsert, onView }: { item: Prompt; theme: Can
                 <div className="truncate text-sm font-medium leading-snug">{item.title}</div>
                 <div className="mt-0.5 truncate text-xs leading-snug opacity-50">{item.prompt}</div>
             </button>
-            <div className="flex shrink-0 flex-col items-center gap-0.5">
+            <div className={onEdit ? "grid shrink-0 grid-cols-2 items-center gap-0.5" : "flex shrink-0 flex-col items-center gap-0.5"}>
                 <button type="button" onClick={onView} className="grid size-6 place-items-center rounded-md opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10" aria-label={t("canvas.sidePanel.viewDetails")} title={t("canvas.sidePanel.viewDetails")}>
                     <Eye className="size-3.5" />
                 </button>
@@ -701,6 +719,8 @@ function PromptRow({ item, theme, onInsert, onView }: { item: Prompt; theme: Can
                 >
                     <Plus className="size-3.5" />
                 </button>
+                {onEdit ? <button type="button" onClick={onEdit} className="grid size-6 place-items-center rounded-md opacity-60 hover:opacity-100" aria-label="编辑本地提示词" title="编辑本地提示词"><Pencil className="size-3.5" /></button> : null}
+                {onDelete ? <Popconfirm title="删除这条本地提示词？" okText="删除" cancelText="取消" onConfirm={onDelete}><button type="button" className="grid size-6 place-items-center rounded-md opacity-60 hover:opacity-100" aria-label="删除本地提示词" title="删除本地提示词"><Trash2 className="size-3.5" /></button></Popconfirm> : null}
             </div>
         </div>
     );

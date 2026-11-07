@@ -1,5 +1,5 @@
 import localforage from "localforage";
-import { LOCAL_PROMPT_CATEGORY, useLocalPromptStore } from "@/stores/use-local-prompt-store";
+import { LOCAL_PROMPT_CATEGORY, LOCAL_PROMPT_SOURCE_ID, useLocalPromptStore } from "@/stores/use-local-prompt-store";
 
 import { runPromptSource, type RawPrompt } from "./prompt-source-runtime";
 import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
@@ -157,6 +157,10 @@ export async function fetchPrompts({ keyword = "", tag = [], category = ALL_PROM
 }
 
 export async function fetchSourcePrompts(sourceId: string): Promise<Prompt[]> {
+    if (sourceId === LOCAL_PROMPT_SOURCE_ID) {
+        await useLocalPromptStore.getState().load();
+        return useLocalPromptStore.getState().prompts;
+    }
     const source = usePromptSourceStore.getState().sources.find((item) => item.id === sourceId);
     if (!source) throw new Error(i18n.t("prompts.sourceMissing"));
     return getSourcePrompts(source);
