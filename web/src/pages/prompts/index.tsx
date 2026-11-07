@@ -1,8 +1,10 @@
-import { FolderPlus, Search } from "lucide-react";
+import { FolderPlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { type ReactNode, type UIEvent, useEffect, useState } from "react";
-import { App, Button, Empty, Input, Spin, Tag } from "antd";
+import { App, Button, Empty, Input, Popconfirm, Spin, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { LocalPromptEditor } from "@/components/prompts/local-prompt-editor";
+import { LOCAL_PROMPT_CATEGORY, LOCAL_PROMPT_SOURCE_ID, useLocalPromptStore } from "@/stores/use-local-prompt-store";
 import { PromptCard } from "@/components/prompts/prompt-card";
 import { usePromptList } from "@/components/prompts/use-prompt-list";
 import { PromptDetailDialog } from "./components/prompt-detail-dialog";
@@ -17,6 +19,8 @@ export default function PromptsPage() {
     const [titleKeyword, setTitleKeyword] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
+    const [editor, setEditor] = useState<Prompt | null>();
+    const removeLocalPrompt = useLocalPromptStore(state => state.remove);
     const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
     const addAsset = useAssetStore((state) => state.addAsset);
     const copyText = useCopyText();
@@ -36,6 +40,10 @@ export default function PromptsPage() {
         message.success(t("common.addedToAssets"));
     };
 
+    const deleteLocalPrompt = async (item: Prompt) => {
+        try { await removeLocalPrompt(item.id); if (selectedPrompt?.id === item.id) setSelectedPrompt(null); message.success("已删除本地提示词"); }
+        catch (error) { message.error(error instanceof Error ? error.message : "删除失败，请重试"); }
+    };
     const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
         const target = event.currentTarget;
         if (query.hasNextPage && !query.isFetchingNextPage && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
@@ -63,15 +71,17 @@ export default function PromptsPage() {
                             </div>
                         </aside>
                         <section className="min-w-0">
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><span className="text-sm opacity-65">本地提示词保存在当前浏览器</span><Button type="primary" icon={<Plus className="size-4" />} onClick={() => setEditor(null)}>新增本地提示词</Button></div>
                             <Input size="large" prefix={<Search className="size-4 text-stone-400" />} value={titleKeyword} placeholder={t("prompts.search")} onChange={(event) => setTitleKeyword(event.target.value)} />
                             {query.isLoading ? <div className="flex h-60 items-center justify-center"><Spin /></div> : null}
-                            {!query.isLoading ? <div className="mt-5"><PromptGrid items={promptItems} onOpen={setSelectedPrompt} renderActions={(item) => <Button type="text" size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>{t("common.addToAssets")}</Button>} onCopy={(item) => copyText(item.prompt, t("common.promptCopied"))} emptyText={t("prompts.empty")} /></div> : null}
+                            {!query.isLoading ? <div className="mt-5"><PromptGrid items={promptItems} onOpen={setSelectedPrompt} renderActions={(item) => item.sourceId === LOCAL_PROMPT_SOURCE_ID ? <><Button type="text" size="small" aria-label="编辑本地提示词" icon={<Pencil className="size-3.5" />} onClick={() => setEditor(item)} /><Popconfirm title="删除这条本地提示词？" okText="删除" cancelText="取消" onConfirm={() => deleteLocalPrompt(item)}><Button type="text" size="small" danger aria-label="删除本地提示词" icon={<Trash2 className="size-3.5" />} /></Popconfirm></> : <Button type="text" size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>{t("common.addToAssets")}</Button>} onCopy={(item) => copyText(item.prompt, t("common.promptCopied"))} emptyText={t("prompts.empty")} /></div> : null}
                             <div className="mt-6 text-center text-xs text-stone-500 dark:text-stone-400">{query.isFetchingNextPage ? t("prompts.loading") : query.hasNextPage ? t("prompts.loadMore") : promptItems.length > 0 ? t("prompts.end") : null}</div>
                         </section>
                     </div>
                 </div>
             </main>
 
+            <LocalPromptEditor open={editor !== undefined} prompt={editor} onClose={() => setEditor(undefined)} onSaved={(item) => { setSelectedCategory(LOCAL_PROMPT_CATEGORY); setSelectedTags([]); setTitleKeyword(""); if (selectedPrompt?.id === item.id) setSelectedPrompt(item); }} />
             <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onSaveAsset={savePromptAsset} />
         </div>
     );

@@ -1,8 +1,10 @@
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { type UIEvent, useEffect, useState } from "react";
-import { App, Empty, Input, Modal, Spin, Tag } from "antd";
+import { App, Button, Empty, Input, Modal, Spin, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { LocalPromptEditor } from "./local-prompt-editor";
+import { LOCAL_PROMPT_CATEGORY } from "@/stores/use-local-prompt-store";
 import { ALL_PROMPTS_OPTION } from "@/services/api/prompts";
 import { cn } from "@/lib/utils";
 import { PromptCard } from "./prompt-card";
@@ -11,6 +13,7 @@ import { usePromptList } from "./use-prompt-list";
 export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; onSelect: (prompt: string) => void }) {
     const { message } = App.useApp();
     const { t } = useTranslation();
+    const [editorOpen, setEditorOpen] = useState(false);
     const [keyword, setKeyword] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
@@ -34,6 +37,7 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
     };
 
     return (
+        <>
         <Modal title={t("prompts.library")} open={open} onCancel={() => onOpenChange(false)} footer={null} width={880} centered>
             <div className="grid h-[62dvh] min-h-0 gap-5 sm:grid-cols-[200px_minmax(0,1fr)]" data-canvas-no-zoom onWheelCapture={(event) => event.stopPropagation()}>
                 <aside className="thin-scrollbar min-h-0 overflow-y-auto border-r border-stone-200 pr-4 dark:border-stone-800">
@@ -58,6 +62,7 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
                     </div>
                 </aside>
                 <section className="flex min-h-0 min-w-0 flex-col">
+                    <div className="mb-3 flex justify-end"><Button type="text" icon={<Plus className="size-4" />} onClick={() => setEditorOpen(true)}>新增本地提示词</Button></div>
                     <Input size="large" prefix={<Search className="size-4 text-stone-400" />} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t("prompts.searchTitle")} />
                     <div className="thin-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto pr-2" data-canvas-no-zoom onScroll={handleListScroll} onWheelCapture={(event) => event.stopPropagation()}>
                         {query.isLoading ? (
@@ -80,5 +85,7 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
                 </section>
             </div>
         </Modal>
+        <LocalPromptEditor open={editorOpen} onClose={() => setEditorOpen(false)} onSaved={() => { setSelectedCategory(LOCAL_PROMPT_CATEGORY); setSelectedTags([]); setKeyword(""); }} />
+        </>
     );
 }
