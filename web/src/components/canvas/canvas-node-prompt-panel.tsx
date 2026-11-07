@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ArrowUp, Check, LoaderCircle, Maximize2, Square } from "lucide-react";
-import { Button, Modal, Segmented, Tooltip } from "antd";
+import { LoaderCircle, Maximize2, Square } from "lucide-react";
+import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
@@ -30,7 +30,6 @@ type CanvasNodePromptPanelProps = {
     mentionReferences?: CanvasResourceReference[];
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
-    onSaveText: (nodeId: string, content: string) => void;
     connectedNodes?: CanvasNodeData[];
     onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
     onStartReferenceSelection?: (nodeId: string) => void;
@@ -38,7 +37,7 @@ type CanvasNodePromptPanelProps = {
     modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
 };
 
-export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], connectedNodes = [], onDisconnectReference, onStartReferenceSelection, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({ node, nodes, connections, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], connectedNodes = [], onDisconnectReference, onStartReferenceSelection, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -50,32 +49,23 @@ export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, is
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
     const [expanded, setExpanded] = useState(false);
-    const [textAction, setTextAction] = useState("edit");
-    const isTextEditor = node.type === CanvasNodeType.Text && mode === "text" && textAction === "edit";
     const hasGenerationPrompt = Boolean(buildNodeGenerationContext(node.id, nodes, connections, prompt).prompt.trim());
-    const placeholder = t(isTextEditor ? "canvas.promptPanel.localText" : `canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`);
+    const placeholder = t(`canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`);
 
-    useEffect(() => { setTextAction("edit"); }, [node.id]);
-
-    // Keep local text editing separate from instructions sent to an AI model.
+    // Restore instructions when switching nodes; text content is edited inline.
     useEffect(() => {
-        setPrompt(isTextEditor ? node.metadata?.content ?? node.metadata?.prompt ?? "" : node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
+        setPrompt(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node.id, textAction]);
+    }, [node.id]);
 
     const updatePrompt = (value: string) => {
         setPrompt(value);
-        if (isTextEditor) return;
         if (isEditingExistingContent) onConfigChange(node.id, { composerContent: value });
         else onPromptChange(node.id, value);
     };
 
     const submit = () => {
         if (isRunning) return;
-        if (isTextEditor) {
-            onSaveText(node.id, prompt);
-            return;
-        }
         if (!hasGenerationPrompt) return;
         onGenerate(node.id, mode, prompt.trim());
     };
@@ -93,7 +83,6 @@ export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, is
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
-            {node.type === CanvasNodeType.Text && mode === "text" ? <Segmented className="mb-3" value={textAction} onChange={setTextAction} options={[{ label: t("canvas.promptPanel.editLocal"), value: "edit" }, { label: t("canvas.promptPanel.aiText"), value: "generate" }]} /> : null}
             <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <CanvasPromptChipInput
                 value={prompt}
@@ -111,7 +100,7 @@ export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, is
                         <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
                     </Tooltip>
                     <CanvasPromptLibrary onSelect={updatePrompt} />
-                    {isTextEditor ? null : mode === "image" ? (
+                    {mode === "image" ? (
                         <>
                             <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="image" onMissingConfig={() => openConfigDialog(true)} className="max-w-[190px]" />
                             <CanvasImageSettingsPopover
@@ -144,9 +133,9 @@ export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, is
                     type="primary"
                     className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
                     danger={isRunning}
-                    disabled={!isRunning && !isTextEditor && !hasGenerationPrompt}
+                    disabled={!isRunning && !hasGenerationPrompt}
                     onClick={() => (isRunning ? onStop(node.id) : submit())}
-                    aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : isTextEditor ? "canvas.promptPanel.saveText" : "canvas.promptPanel.generate")}
+                    aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : "canvas.promptPanel.generate")}
                 >
                     <span className="flex items-center gap-1.5">
                         {isRunning ? (
@@ -156,7 +145,7 @@ export function CanvasNodePromptPanel({ node, nodes, connections, onSaveText, is
                                 <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
                             </>
                         ) : (
-                            isTextEditor ? <Check className="size-4" /> : <ArrowUp className="size-4" />
+                            <span className="text-xs font-medium">{t("canvas.promptPanel.generate")}</span>
                         )}
                     </span>
                 </Button>

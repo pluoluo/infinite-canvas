@@ -140,9 +140,16 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                 role="textbox"
                 aria-multiline="true"
                 className={`${className || ""} overflow-y-auto whitespace-pre-wrap break-words outline-none`}
-                style={{ ...style, cursor: "text" }}
+                style={{ ...style, cursor: "text", whiteSpace: "pre-wrap", overflowWrap: "anywhere", minWidth: 0 }}
                 onInput={() => {
                     if (!composingRef.current) syncFromEditor();
+                }}
+                onPaste={(event) => {
+                    if (!event.clipboardData.types.includes("text/plain")) return;
+                    event.preventDefault();
+                    // Keep native undo while discarding pasted HTML and its nowrap styles.
+                    document.execCommand("insertText", false, event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n"));
+                    syncFromEditor();
                 }}
                 onCompositionStart={() => {
                     composingRef.current = true;

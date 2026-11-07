@@ -1817,7 +1817,7 @@ function InfiniteCanvasPage() {
         setNodes((prev) =>
             prev.map((node) =>
                 node.id === nodeId
-                    ? { ...node, metadata: { ...node.metadata, content, texts: node.metadata?.texts?.map((text) => (text.id === node.metadata?.primaryTextId ? { ...text, content } : text)) } }
+                    ? { ...node, metadata: { ...node.metadata, content, ...(node.type === CanvasNodeType.Text ? { prompt: undefined } : {}), texts: node.metadata?.texts?.map((text) => (text.id === node.metadata?.primaryTextId ? { ...text, content } : text)) } }
                     : node,
             ),
         );
@@ -3210,7 +3210,6 @@ function InfiniteCanvasPage() {
                     node={panelNode}
                     nodes={nodes}
                     connections={connections}
-                    onSaveText={(nodeId, content) => { handleNodeContentChange(nodeId, content); handleConfigNodeChange(nodeId, { status: NODE_STATUS_SUCCESS, errorDetails: undefined }); setDialogNodeId(null); }}
                     isRunning={runningNodeId === panelNode.id}
                     mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || EMPTY_REFERENCES}
                     connectedNodes={connectedNodesByNodeId.get(panelNode.id) || []}
@@ -3227,7 +3226,7 @@ function InfiniteCanvasPage() {
                     }}
                 />
             ),
-        [configInputsById, confirmStopGeneration, connectedNodesByNodeId, connections, disconnectNodeReference, handleConfigNodeChange, handleGenerateNode, handleNodeContentChange, handleNodePromptChange, mentionReferencesByNodeId, nodes, renderPluginPanel, runningNodeId, startNodeReferenceSelection],
+        [configInputsById, confirmStopGeneration, connectedNodesByNodeId, connections, disconnectNodeReference, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, nodes, renderPluginPanel, runningNodeId, startNodeReferenceSelection],
     );
 
     const renderNodeContentPanel = useCallback(

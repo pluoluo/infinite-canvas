@@ -545,13 +545,13 @@ function MissingPluginContent({ theme, type }: Pick<NodeContentRendererProps, "t
 function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, batchExpanded, onContentChange, onStopEditing, onToggleBatch, onSetBatchPrimary }: NodeContentRendererProps) {
     const { t } = useTranslation();
     const fontSize = node.metadata?.fontSize || 14;
-    const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
+    const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box", overflowWrap: "anywhere", whiteSpace: "pre-wrap" } as React.CSSProperties;
     const texts = node.metadata?.texts || [];
     const batchCount = texts.length;
     const isBatchRoot = batchCount > 1;
     const primaryTextId = node.metadata?.primaryTextId || texts[0]?.id;
     const primaryText = texts.find((text) => text.id === primaryTextId);
-    const content = primaryText?.content || node.metadata?.content || "";
+    const content = primaryText?.content || node.metadata?.content || node.metadata?.prompt || "";
     const paddingClass = isBatchRoot ? "px-4 pb-4 pt-14" : "p-4";
 
     return (
@@ -561,7 +561,7 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                       .filter((text) => text.id !== primaryTextId)
                       .map((text, index) => <ExpandedTextCard key={text.id} node={node} text={text} index={index} onSetPrimary={() => onSetBatchPrimary?.(text.id)} />)
                 : null}
-            <div className="flex h-full w-full flex-col overflow-hidden rounded-3xl">
+            <div className="flex h-full w-full min-w-0 flex-col overflow-hidden rounded-3xl">
                 {isEditingContent ? (
                     <CanvasResourceMentionTextarea
                         ref={textareaRef}
