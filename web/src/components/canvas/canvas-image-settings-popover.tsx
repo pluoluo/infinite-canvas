@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Settings2 } from "lucide-react";
-import { Button } from "antd";
+import { App, Button } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@/components/image-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
-import type { AiConfig } from "@/stores/use-config-store";
+import { useConfigStore, type AiConfig } from "@/stores/use-config-store";
 
 type CanvasImageSettingsPopoverProps = {
     config: AiConfig;
@@ -89,6 +89,12 @@ function ImageSettingsPortal({
     config: AiConfig;
     onConfigChange: (key: keyof AiConfig, value: string) => void;
 }) {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const saveDefaults = () => {
+        useConfigStore.setState((state) => ({ config: { ...state.config, imageModel: config.model, model: config.model, quality: config.quality, size: config.size, background: config.background, canvasImageCount: config.count } }));
+        message.success(t("canvas.imageTools.defaultsSaved"));
+    };
     const width = 356;
     const gap = 8;
     const margin = 12;
@@ -120,6 +126,10 @@ function ImageSettingsPortal({
             onClick={(event) => event.stopPropagation()}
         >
             <ImageSettingsPanel config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-4" />
+            <div className="mt-4 border-t pt-3" style={{ borderColor: theme.toolbar.border }}>
+                <Button type="text" onClick={saveDefaults}>{t("canvas.imageTools.saveDefaults")}</Button>
+                <p className="mt-1 text-xs" style={{ color: theme.node.muted }}>{t("canvas.imageTools.defaultsHint")}</p>
+            </div>
         </div>,
         document.body,
     );

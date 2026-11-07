@@ -37,6 +37,7 @@ import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeRespons
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "@/components/canvas/canvas-node-hover-toolbar";
 import { CanvasSelectionToolbar } from "@/components/canvas/canvas-selection-toolbar";
 import { InfiniteCanvas } from "@/components/canvas/infinite-canvas";
+import { getHiddenNodeIds } from "@/lib/canvas/canvas-node-visibility";
 import { Minimap } from "@/components/canvas/canvas-mini-map";
 import { CanvasNode } from "@/components/canvas/canvas-node";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
@@ -775,7 +776,9 @@ function InfiniteCanvasPage() {
             let bestNodeId: string | null = null;
             let bestPriority = Number.POSITIVE_INFINITY;
 
+            const hidden = getHiddenNodeIds(nodesRef.current);
             [...nodesRef.current]
+                .filter((node) => !hidden.has(node.id))
                 .reverse()
                 .forEach((node) => {
                     const anchor = getConnectionTargetAnchor(node, current);
@@ -812,9 +815,11 @@ function InfiniteCanvasPage() {
         // `nodes` keeps the container rect re-read on node changes, matching the previous behaviour when the container resizes without a size update.
     }, [nodes, size.height, size.width, viewport.k, viewport.x, viewport.y]);
 
+    const hiddenNodeIds = useMemo(() => getHiddenNodeIds(nodes), [nodes]);
+    const displayedNodes = useMemo(() => nodes.filter((node) => !hiddenNodeIds.has(node.id)), [hiddenNodeIds, nodes]);
     const visibleNodes = useMemo(
-        () => nodes.filter((node) => node.position.x + node.width > viewBounds.left && node.position.x < viewBounds.right && node.position.y + node.height > viewBounds.top && node.position.y < viewBounds.bottom),
-        [nodes, viewBounds],
+        () => displayedNodes.filter((node) => node.position.x + node.width > viewBounds.left && node.position.x < viewBounds.right && node.position.y + node.height > viewBounds.top && node.position.y < viewBounds.bottom),
+        [displayedNodes, viewBounds],
     );
 
     const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -825,7 +830,7 @@ function InfiniteCanvasPage() {
             connections.flatMap((connection) => {
                 const from = nodeById.get(connection.fromNodeId);
                 const to = nodeById.get(connection.toNodeId);
-                if (!from || !to) return [];
+                if (!from || !to || hiddenNodeIds.has(from.id) || hiddenNodeIds.has(to.id)) return [];
                 const startX = from.position.x + from.width;
                 const startY = from.position.y + from.height / 2;
                 const endX = to.position.x;
@@ -835,12 +840,13 @@ function InfiniteCanvasPage() {
                     Math.max(startX + curvature, endX) > viewBounds.left && Math.min(startX, endX - curvature) < viewBounds.right && Math.max(startY, endY) > viewBounds.top && Math.min(startY, endY) < viewBounds.bottom;
                 return inView ? [{ connection, from, to }] : [];
             }),
-        [connections, nodeById, viewBounds],
+        [connections, hiddenNodeIds, nodeById, viewBounds],
     );
     // The toolbar follows a single selected node selected by click, creation, marquee, or keyboard.
     // It stays hidden for multi-selection and while isNodeDragging is true.
     const singleSelectedNodeId = selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] : null;
-    const toolbarNode = (toolbarNodeId ? nodeById.get(toolbarNodeId) || null : null) || (singleSelectedNodeId ? nodeById.get(singleSelectedNodeId) || null : null);
+    const toolbarCandidate = (toolbarNodeId ? nodeById.get(toolbarNodeId) || null : null) || (singleSelectedNodeId ? nodeById.get(singleSelectedNodeId) || null : null);
+    const toolbarNode = toolbarCandidate && !hiddenNodeIds.has(toolbarCandidate.id) ? toolbarCandidate : null;
     const infoNode = infoNodeId ? nodeById.get(infoNodeId) || null : null;
     const cropNode = cropNodeId ? nodeById.get(cropNodeId) || null : null;
     const maskEditNode = maskEditNodeId ? nodeById.get(maskEditNodeId) || null : null;
@@ -852,7 +858,7 @@ function InfiniteCanvasPage() {
     const previewNode = previewNodeId ? nodeById.get(previewNodeId) || null : null;
     const previewContent = previewImageId ? previewNode?.metadata?.images?.find((image) => image.id === previewImageId)?.content : previewNode?.metadata?.content;
     const hasMultipleSelectedNodes = selectedNodeIds.size > 1;
-    const selectedNodes = useMemo(() => nodes.filter((node) => selectedNodeIds.has(node.id)), [nodes, selectedNodeIds]);
+    const selectedNodes = useMemo(() => displayedNodes.filter((node) => selectedNodeIds.has(node.id)), [displayedNodes, selectedNodeIds]);
     const canGroupSelection = canGroupSelectedNodes(selectedNodeIds, nodes);
     const canUngroupSelection = canUngroupSelectedNodes(selectedNodeIds, nodes);
     const activeNodeId = hasMultipleSelectedNodes ? null : hoveredNodeId || (selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] : null);
@@ -1090,6 +1096,15 @@ function InfiniteCanvasPage() {
         setDialogNodeId(null);
     }, [cancelPendingConnectionCreate]);
 
+    const toggleNodeVisibility = useCallback((nodeId: string) => {
+        setNodes((previous) => previous.map((node) => node.id === nodeId ? { ...node, hidden: !node.hidden } : node));
+        deselectCanvas();
+        setHoverPreviewNodeId(null);
+        setPreviewNodeId(null);
+        setCropNodeId(null);
+        setMaskEditNodeId(null);
+    }, [deselectCanvas]);
+
     const clearCanvas = useCallback(() => {
         setNodes([]);
         setConnections([]);
@@ -1215,6 +1230,7 @@ function InfiniteCanvasPage() {
             const node = nodesRef.current.find((item) => item.id === nodeId);
             if (!node) return;
             setHoverPreviewNodeId(null);
+            if (getHiddenNodeIds(nodesRef.current).has(nodeId)) return;
             const target = focusViewportForNode(node, size, measureFocusFrame(containerRef.current, nodeId));
             setSelectedNodeIds(new Set([nodeId]));
             setSelectedConnectionId(null);
@@ -1443,11 +1459,13 @@ function InfiniteCanvasPage() {
                     const initial = initialPositions.get(node.id);
                     return initial ? { ...node, position: { x: initial.x + dx, y: initial.y + dy } } : node;
                 });
-                const targetGroup = findGroupDropTarget(movedIds, moved);
+                const hidden = getHiddenNodeIds(moved);
+                const visible = moved.filter((node) => !hidden.has(node.id));
+                const targetGroup = findGroupDropTarget(movedIds, visible);
                 if (targetGroup) return snapNodesIntoGroup(movedIds, moved, targetGroup);
                 return moved.map((node) => {
                     if (!movedIds.has(node.id) || node.type === CanvasNodeType.Group) return node;
-                    const groupId = findContainingGroupId(node, moved);
+                    const groupId = findContainingGroupId(node, visible);
                     if (node.metadata?.groupId === groupId) return node;
                     return { ...node, metadata: { ...node.metadata, groupId } };
                 });
@@ -1536,7 +1554,9 @@ function InfiniteCanvasPage() {
             const rectH = Math.abs(world.y - currentSelection.startWorldY);
             const nextSelected = new Set<string>(currentSelection.additive ? currentSelection.initialSelectedNodeIds : []);
 
+            const hidden = getHiddenNodeIds(nodesRef.current);
             nodesRef.current
+                .filter((node) => !hidden.has(node.id))
                 .forEach((node) => {
                     const intersects = rectX < node.position.x + node.width && rectX + rectW > node.position.x && rectY < node.position.y + node.height && rectY + rectH > node.position.y;
 
@@ -1721,7 +1741,8 @@ function InfiniteCanvasPage() {
 
             if (isModifierShortcut && !event.altKey && key === "a") {
                 event.preventDefault();
-                setSelectedNodeIds(new Set(nodesRef.current.map((node) => node.id)));
+                const hidden = getHiddenNodeIds(nodesRef.current);
+                setSelectedNodeIds(new Set(nodesRef.current.filter((node) => !hidden.has(node.id)).map((node) => node.id)));
                 setSelectedConnectionId(null);
                 setContextMenu(null);
                 setSelectionBox(null);
@@ -3276,7 +3297,7 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
-            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onHoverNode={setHoverPreviewNodeId} onInsertAsset={handleAssetInsert} />
+            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onToggleNodeVisibility={toggleNodeVisibility} onHoverNode={setHoverPreviewNodeId} onInsertAsset={handleAssetInsert} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
@@ -3505,7 +3526,7 @@ function InfiniteCanvasPage() {
                     onShowImageInfoChange={setShowImageInfo}
                 />
 
-                {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
+                {isMiniMapOpen ? <Minimap nodes={displayedNodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />
 

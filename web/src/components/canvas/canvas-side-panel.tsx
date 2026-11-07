@@ -1,11 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Empty, Input, Modal, Popconfirm, Select, Spin, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Download, Eye, EyeOff, Maximize2, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes, type CanvasTheme } from "@/lib/canvas-theme";
+import { getHiddenNodeIds } from "@/lib/canvas/canvas-node-visibility";
 import { exportCanvasNodes } from "@/lib/canvas/canvas-export";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ type Props = {
     selectedNodeIds: Set<string>;
     onFocusNode: (nodeId: string) => void;
     onPreviewNode: (nodeId: string) => void;
+    onToggleNodeVisibility: (nodeId: string) => void;
     onHoverNode: (nodeId: string | null) => void;
     onInsertAsset: (payload: InsertAssetPayload) => void;
 };
@@ -52,7 +54,7 @@ const STATUS_COLOR: Record<string, string> = {
     idle: "transparent",
 };
 
-export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, onHoverNode, onInsertAsset }: Props) {
+export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, onToggleNodeVisibility, onHoverNode, onInsertAsset }: Props) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [tab, setTab] = useState<PanelTab>("canvas");
@@ -108,7 +110,7 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                 </div>
                 <div className="mt-2 min-h-0 flex-1 overflow-hidden">
                     {tab === "canvas" ? (
-                        <CanvasNodesTab nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={onFocusNode} onPreviewNode={onPreviewNode} onHoverNode={onHoverNode} theme={theme} />
+                        <CanvasNodesTab nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={onFocusNode} onPreviewNode={onPreviewNode} onToggleNodeVisibility={onToggleNodeVisibility} onHoverNode={onHoverNode} theme={theme} />
                     ) : tab === "assets" ? (
                         <CanvasAssetsTab onInsert={onInsertAsset} theme={theme} />
                     ) : (
@@ -141,10 +143,11 @@ function nodePreviewText(node: CanvasNodeData) {
     return getNodeDefinition(node.type)?.title || node.type;
 }
 
-function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, onHoverNode, theme }: { nodes: CanvasNodeData[]; selectedNodeIds: Set<string>; onFocusNode: (nodeId: string) => void; onPreviewNode: (nodeId: string) => void; onHoverNode: (nodeId: string | null) => void; theme: CanvasTheme }) {
+function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, onToggleNodeVisibility, onHoverNode, theme }: { nodes: CanvasNodeData[]; selectedNodeIds: Set<string>; onFocusNode: (nodeId: string) => void; onPreviewNode: (nodeId: string) => void; onToggleNodeVisibility: (nodeId: string) => void; onHoverNode: (nodeId: string | null) => void; theme: CanvasTheme }) {
     const { message } = App.useApp();
     const { t } = useTranslation();
     useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const hiddenIds = useMemo(() => getHiddenNodeIds(nodes), [nodes]);
     const [keyword, setKeyword] = useState("");
     const [typeFilter, setTypeFilter] = useState<string>("all");
     const [selectMode, setSelectMode] = useState(false);
@@ -263,18 +266,17 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                                 const isChecked = checked.has(node.id);
                                 const active = selectMode ? isChecked : selectedNodeIds.has(node.id);
                                 return (
+                                    <div key={node.id} data-node-item={node.id} className="relative">
                                     <button
-                                        key={node.id}
                                         type="button"
-                                        data-node-item
                                         onClick={() => (selectMode ? toggleChecked(node.id) : activateNode(node))}
                                         onMouseEnter={() => onHoverNode(node.id)}
                                         onMouseLeave={(event) => {
                                             const to = event.relatedTarget as Element | null;
                                             if (!to || !to.closest("[data-node-item]")) onHoverNode(null);
                                         }}
-                                        className="group relative flex min-w-0 flex-col rounded-lg p-1 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
-                                        style={active ? { background: theme.toolbar.activeBg } : undefined}
+                                        className="group relative flex w-full min-w-0 flex-col rounded-lg p-1 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
+                                        style={{ ...(active ? { background: theme.toolbar.activeBg } : {}), opacity: hiddenIds.has(node.id) ? 0.5 : 1 }}
                                         title={selectMode ? undefined : t("canvas.sidePanel.focusNode")}
                                     >
                                         <span className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-md">
@@ -286,8 +288,10 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                                             ) : null}
                                             {node.metadata?.status && node.metadata.status !== "idle" ? <span className="absolute right-1 top-1 size-1.5 rounded-full" style={{ background: STATUS_COLOR[node.metadata.status] || "transparent" }} /> : null}
                                         </span>
-                                        <span className="mt-1 block truncate text-xs font-medium leading-snug">{node.title || getNodeDefinition(node.type)?.title || t("canvas.node.untitled")}</span>
+                                        <span className="mt-1 block w-full truncate pr-6 text-xs font-medium leading-snug">{node.title || getNodeDefinition(node.type)?.title || t("canvas.node.untitled")}</span>
                                     </button>
+                                    {selectMode ? null : <button type="button" disabled={hiddenIds.has(node.id) && !node.hidden} onClick={() => onToggleNodeVisibility(node.id)} className="absolute bottom-0 right-0 grid size-6 place-items-center rounded-md hover:bg-black/10 disabled:opacity-30 dark:hover:bg-white/10" aria-label={t(hiddenIds.has(node.id) ? "canvas.sidePanel.showNode" : "canvas.sidePanel.hideNode")} title={t(hiddenIds.has(node.id) && !node.hidden ? "canvas.sidePanel.parentHidden" : hiddenIds.has(node.id) ? "canvas.sidePanel.showNode" : "canvas.sidePanel.hideNode")}>{hiddenIds.has(node.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}</button>}
+                                    </div>
                                 );
                             })}
                         </div>
@@ -304,9 +308,9 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                             return (
                                 <div
                                     key={node.id}
-                                    data-node-item
+                                    data-node-item={node.id}
                                     className={cn("group relative flex items-center rounded-lg transition", depth && "ml-5", active ? "" : "hover:bg-black/5 dark:hover:bg-white/5")}
-                                    style={active ? { background: theme.toolbar.activeBg } : undefined}
+                                    style={{ ...(active ? { background: theme.toolbar.activeBg } : {}), opacity: hiddenIds.has(node.id) ? 0.5 : 1 }}
                                     onMouseEnter={() => onHoverNode(node.id)}
                                     onMouseLeave={(event) => {
                                         const to = event.relatedTarget as Element | null;
@@ -330,10 +334,11 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                                         </span>
                                         {node.metadata?.status && node.metadata.status !== "idle" ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[node.metadata.status] || "transparent" }} /> : null}
                                     </button>
-                                    {selectMode || !isImage ? null : (
-                                        <div className="flex shrink-0 flex-col items-center gap-0.5 pr-1.5">
-                                            <button type="button" onClick={() => onPreviewNode(node.id)} className="grid size-7 place-items-center rounded-md opacity-55 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10" aria-label={t("canvas.sidePanel.preview")} title={t("canvas.sidePanel.preview")}>
-                                                <Eye className="size-3.5" />
+                                    {selectMode ? null : (
+                                        <div className="flex shrink-0 items-center gap-0.5 pr-1.5">
+                                            {isImage ? <button type="button" onClick={() => onPreviewNode(node.id)} className="grid size-7 place-items-center rounded-md opacity-55 transition hover:bg-black/10 dark:hover:bg-white/10" aria-label={t("canvas.sidePanel.preview")} title={t("canvas.sidePanel.preview")}><Maximize2 className="size-3.5" /></button> : null}
+                                            <button type="button" disabled={hiddenIds.has(node.id) && !node.hidden} onClick={() => onToggleNodeVisibility(node.id)} className="grid size-7 place-items-center rounded-md opacity-70 transition hover:bg-black/10 disabled:opacity-30 dark:hover:bg-white/10" aria-label={t(hiddenIds.has(node.id) ? "canvas.sidePanel.showNode" : "canvas.sidePanel.hideNode")} title={t(hiddenIds.has(node.id) && !node.hidden ? "canvas.sidePanel.parentHidden" : hiddenIds.has(node.id) ? "canvas.sidePanel.showNode" : "canvas.sidePanel.hideNode")}>
+                                                {hiddenIds.has(node.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                                             </button>
                                         </div>
                                     )}

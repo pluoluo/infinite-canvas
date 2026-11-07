@@ -91,6 +91,7 @@ export type CanvasNodeMetadata = {
 };
 
 export type CanvasNodeData = {
+    hidden?: boolean;
     id: string;
     type: CanvasNodeTypeId;
     title: string;
