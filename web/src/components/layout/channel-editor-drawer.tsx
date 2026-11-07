@@ -77,6 +77,11 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                     <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.baseUrl")}</span>
                     <Input value={draft.baseUrl} onChange={(event) => patch({ baseUrl: event.target.value })} placeholder="https://api.example.com" />
                 </label>
+                {draft.apiFormat === "openai" ? <label className="block md:col-span-2">
+                    <span className="mb-1 block text-sm font-medium">文本接口</span>
+                    <Select className="w-full" value={draft.textApiFormat || "auto"} options={[{ label: "自动", value: "auto" }, { label: "Chat Completions（兼容渠道）", value: "chat-completions" }, { label: "Responses", value: "responses" }]} onChange={(value) => patch({ textApiFormat: value === "auto" ? undefined : value as ModelChannel["textApiFormat"] })} />
+                    <span className="mt-1 block text-xs opacity-65">基础地址填到 /v1 即可，接口路径自动补全。小米 MiMo 自动使用 Chat Completions；自定义调用脚本按脚本执行。</span>
+                </label> : null}
                 <label className="block md:col-span-2">
                     <span className="mb-1 block text-sm font-medium">API Key</span>
                     <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />

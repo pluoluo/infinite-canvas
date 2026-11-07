@@ -9,6 +9,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
+import { requestChatCompletions } from "./chat-completions";
 import { isImageApiChannel, requestImageApi, type ImageApiLifecycle } from "./image-api";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
@@ -345,7 +346,7 @@ function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
     };
 }
 
-function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): ResponseInputMessage[] {
+function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): Array<T | AiTextMessage> {
     const systemPrompt = config.systemPrompt.trim();
     return systemPrompt ? [{ role: "system" as const, content: systemPrompt }, ...messages] : messages;
 }
@@ -872,6 +873,11 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
     try {
         if (requestConfig.apiFormat === "gemini") {
             const answer = (await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages), onDelta, options)).content || apiText("noContent");
+            if (answer === apiText("noContent")) onDelta(answer);
+            return answer;
+        }
+        if (requestConfig.textApiFormat === "chat-completions") {
+            const answer = (await requestChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options)) || apiText("noContent");
             if (answer === apiText("noContent")) onDelta(answer);
             return answer;
         }

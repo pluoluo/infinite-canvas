@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import { isImageApiChannel, isManagedImageApiProvider } from "@/services/api/image-api";
 
 export type ApiCallFormat = "openai" | "gemini";
+export type TextApiFormat = "chat-completions" | "responses";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
@@ -22,6 +23,7 @@ export type ModelChannel = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    textApiFormat?: TextApiFormat;
     models: ChannelModel[];
 };
 
@@ -30,6 +32,7 @@ export type AiConfig = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    textApiFormat?: TextApiFormat;
     channels: ModelChannel[];
     model: string;
     imageModel: string;
@@ -320,6 +323,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
         apiFormat,
+        textApiFormat: channel?.textApiFormat === "chat-completions" || channel?.textApiFormat === "responses" ? channel.textApiFormat : undefined,
         models: normalizeChannelModels(channel?.models),
     };
 }
@@ -436,6 +440,11 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
 }
 
+export function isMiMoBaseUrl(baseUrl: string) {
+    try { return new URL(baseUrl).hostname.endsWith(".xiaomimimo.com"); }
+    catch { return false; }
+}
+
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
     return {
@@ -444,6 +453,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: channel.apiFormat,
+        textApiFormat: channel.textApiFormat || (isMiMoBaseUrl(channel.baseUrl) ? "chat-completions" : "responses"),
     };
 }
 
