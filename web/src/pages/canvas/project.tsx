@@ -29,6 +29,7 @@ import { CanvasConfigComposer } from "@/components/canvas/canvas-config-composer
 import { CanvasConfigNodePanel } from "@/components/canvas/canvas-config-node-panel";
 import { CanvasNodeContextMenu } from "@/components/canvas/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
+import { CanvasNodeAnnotationDialog } from "@/components/canvas/canvas-node-annotation-dialog";
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from "@/components/canvas/canvas-node-crop-dialog";
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "@/components/canvas/canvas-node-mask-edit-dialog";
 import { CanvasNodeSplitDialog, type CanvasImageSplitParams } from "@/components/canvas/canvas-node-split-dialog";
@@ -257,6 +258,7 @@ function InfiniteCanvasPage() {
     const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
     const [infoNodeId, setInfoNodeId] = useState<string | null>(null);
     const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
+    const [annotationNodeId, setAnnotationNodeId] = useState<string | null>(null);
     const [cropNodeId, setCropNodeId] = useState<string | null>(null);
     const [maskEditNodeId, setMaskEditNodeId] = useState<string | null>(null);
     const [splitNodeId, setSplitNodeId] = useState<string | null>(null);
@@ -848,6 +850,7 @@ function InfiniteCanvasPage() {
     const toolbarCandidate = (toolbarNodeId ? nodeById.get(toolbarNodeId) || null : null) || (singleSelectedNodeId ? nodeById.get(singleSelectedNodeId) || null : null);
     const toolbarNode = toolbarCandidate && !hiddenNodeIds.has(toolbarCandidate.id) ? toolbarCandidate : null;
     const infoNode = infoNodeId ? nodeById.get(infoNodeId) || null : null;
+    const annotationNode = annotationNodeId ? nodeById.get(annotationNodeId) || null : null;
     const cropNode = cropNodeId ? nodeById.get(cropNodeId) || null : null;
     const maskEditNode = maskEditNodeId ? nodeById.get(maskEditNodeId) || null : null;
     const splitNode = splitNodeId ? nodeById.get(splitNodeId) || null : null;
@@ -2065,6 +2068,21 @@ function InfiniteCanvasPage() {
         },
         [effectiveConfig.model, effectiveConfig.textModel, message, t],
     );
+
+    const annotateImageNode = useCallback(async (node: CanvasNodeData, dataUrl: string) => {
+        const image = await uploadImage(dataUrl);
+        const childId = nanoid();
+        setNodes((prev) => [...prev, {
+            id: childId, type: CanvasNodeType.Image, title: `${node.title || "图片"} · 标注`,
+            position: { x: node.position.x + node.width + 96, y: node.position.y },
+            width: node.width, height: node.width * image.height / image.width,
+            metadata: { ...imageMetadata(image), prompt: node.metadata?.prompt },
+        }]);
+        setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+        setSelectedNodeIds(new Set([childId]));
+        setDialogNodeId(null);
+        setAnnotationNodeId(null);
+    }, []);
 
     const cropImageNode = useCallback(async (node: CanvasNodeData, crop: CanvasImageCropRect) => {
         if (!node.metadata?.content) return;
@@ -3475,6 +3493,7 @@ function InfiniteCanvasPage() {
                     onUpload={(node) => handleUploadRequest(node.id)}
                     onDownload={downloadNodeImage}
                     onSaveAsset={(node) => void saveNodeAsset(node)}
+                    onAnnotate={(node) => { setDialogNodeId(null); setAnnotationNodeId(node.id); }}
                     onMaskEdit={(node) => setMaskEditNodeId(node.id)}
                     onCrop={(node) => setCropNodeId(node.id)}
                     onSplit={(node) => setSplitNodeId(node.id)}
@@ -3564,6 +3583,7 @@ function InfiniteCanvasPage() {
                 <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
                 <CanvasPluginManagerModal open={pluginManagerOpen} onClose={() => setPluginManagerOpen(false)} />
 
+                {annotationNode?.metadata?.content ? <CanvasNodeAnnotationDialog key={annotationNode.id} dataUrl={annotationNode.metadata.content} onClose={() => setAnnotationNodeId(null)} onSave={(dataUrl) => annotateImageNode(annotationNode, dataUrl)} /> : null}
                 {cropNode?.metadata?.content ? <CanvasNodeCropDialog dataUrl={cropNode.metadata.content} open={Boolean(cropNode)} onClose={() => setCropNodeId(null)} onConfirm={(crop) => void cropImageNode(cropNode!, crop)} /> : null}
 
                 {maskEditNode?.metadata?.content ? (
