@@ -98,3 +98,19 @@ test("unavailable explicit selections are preserved for every generation capabil
         expect(resolveModelForCapability(config, `removed::${capability}`, capability)).toBe(`removed::${capability}`);
     }
 });
+
+
+test("canvas text generation adds the image-prompt contract without overwriting saved custom instructions", () => {
+    const custom = { ...config, systemPrompt: "保留用户品牌的原始文案。" };
+    const generated = buildGenerationConfig(custom, undefined, "text");
+    expect(generated.systemPrompt.startsWith(custom.systemPrompt)).toBe(true);
+    expect(generated.systemPrompt).toContain("GPT Image 2.5");
+    expect(generated.systemPrompt).toContain("只输出最终提示词正文");
+    expect(generated.systemPrompt).toContain("只修改什么");
+    expect(generated.systemPrompt).toContain("沿用已有编号");
+    expect(custom.systemPrompt).toBe("保留用户品牌的原始文案。");
+});
+test("image, audio and video generation keep their original system prompt", () => {
+    const custom = { ...config, systemPrompt: "User custom instructions" };
+    for (const mode of ["image", "audio", "video"] as const) expect(buildGenerationConfig(custom, undefined, mode).systemPrompt).toBe(custom.systemPrompt);
+});
