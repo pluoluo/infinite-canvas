@@ -2903,7 +2903,7 @@ function InfiniteCanvasPage() {
                                     texts: completedTexts,
                                     primaryTextId: primaryText?.id,
                                     status: primaryText ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR,
-                                    errorDetails: primaryText ? undefined : t("canvas.projectPage.generationFailed"),
+                                    errorDetails: primaryText ? undefined : failedTexts[0]?.errorDetails || t("canvas.projectPage.generationFailed"),
                                 },
                             };
                         }

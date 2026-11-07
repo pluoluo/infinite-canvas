@@ -402,7 +402,7 @@ function responseErrorMessage(value: unknown) {
     const error = isRecord(value.error) ? value.error : undefined;
     const response = isRecord(value.response) ? value.response : undefined;
     const responseError = response && isRecord(response.error) ? response.error : undefined;
-    return stringValue(value.msg) || stringValue(error?.message) || stringValue(responseError?.message);
+    return stringValue(value.msg) || stringValue(value.detail) || stringValue(error?.message) || stringValue(responseError?.message);
 }
 
 function stringValue(value: unknown) {

@@ -513,6 +513,12 @@ export function withLocalProxy(url: string) {
     if (typeof location !== "undefined") {
         const target = new URL(url, location.origin);
         if (target.origin === location.origin && target.pathname.startsWith("/api/v1/infinite/")) return url;
+        if (import.meta.env.VITE_IMAGE_API === "1") {
+            const cluster = target.hostname.replace(/\.xiaomimimo\.com$/, "");
+            if (target.protocol === "https:" && !target.port && !target.username && !target.password && ["api", "token-plan-cn", "token-plan-sgp", "token-plan-ams"].includes(cluster) && target.hostname === `${cluster}.xiaomimimo.com` && /^\/v1\/(chat\/completions|responses|models)$/.test(target.pathname)) {
+                return `/api/v1/infinite/mimo/${cluster}${target.pathname}${target.search}`;
+            }
+        }
     }
     const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
     if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;

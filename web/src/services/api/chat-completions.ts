@@ -5,6 +5,7 @@ import type { AiTextMessage } from "./image";
 type ChatPayload = {
     error?: { message?: string };
     message?: string;
+    detail?: string;
     code?: number;
     msg?: string;
     choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
@@ -33,7 +34,7 @@ export async function requestChatCompletions(config: AiConfig, messages: AiTextM
         let detail = "";
         try {
             const payload = JSON.parse(raw) as ChatPayload;
-            detail = payload.error?.message || payload.msg || payload.message || "";
+            detail = payload.error?.message || payload.msg || payload.message || payload.detail || "";
         } catch {
             detail = raw;
         }

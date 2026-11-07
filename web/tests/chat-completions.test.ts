@@ -1,10 +1,20 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: () => null, setItem: () => {}, removeItem: () => {} } });
-const { createModelChannel, defaultConfig, resolveModelRequestConfig, buildApiUrl } = await import("../src/stores/use-config-store");
+const { createModelChannel, defaultConfig, resolveModelRequestConfig, buildApiUrl, withLocalProxy, useConfigStore } = await import("../src/stores/use-config-store");
 const { requestImageQuestion } = await import("../src/services/api/image");
 const fetchOriginal = globalThis.fetch;
-afterEach(() => { globalThis.fetch = fetchOriginal; });
+const locationOriginal = Object.getOwnPropertyDescriptor(globalThis, "location");
+const envOriginal = process.env.VITE_IMAGE_API;
+const configOriginal = useConfigStore.getState().config;
+afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+    if (locationOriginal) Object.defineProperty(globalThis, "location", locationOriginal);
+    else Reflect.deleteProperty(globalThis, "location");
+    if (envOriginal === undefined) delete process.env.VITE_IMAGE_API;
+    else process.env.VITE_IMAGE_API = envOriginal;
+    useConfigStore.setState({ config: configOriginal });
+});
 afterAll(() => {
     if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
     else Reflect.deleteProperty(globalThis, "localStorage");
@@ -67,4 +77,25 @@ test("explicit Responses preserves the original endpoint and input format", asyn
         return streamResponse(['data: {"type":"response.output_text.delta","delta":"原有接口"}\n\n', 'data: [DONE]\n\n']);
     }) as typeof fetch;
     expect(await requestImageQuestion({ ...config, channels: [{ ...channel, textApiFormat: "responses" }] }, messages, () => {})).toBe("原有接口");
+});
+
+test("image-api deployments relay official MiMo endpoints before the optional local proxy", () => {
+    process.env.VITE_IMAGE_API = "1";
+    Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "https://canvas.example" } });
+    useConfigStore.setState({ config: { ...configOriginal, proxyEnabled: true, proxyUrl: "http://127.0.0.1:23210" } });
+    for (const cluster of ["api", "token-plan-cn", "token-plan-sgp", "token-plan-ams"]) {
+        for (const path of ["chat/completions", "responses", "models"]) expect(withLocalProxy(`https://${cluster}.xiaomimimo.com/v1/${path}`)).toBe(`/api/v1/infinite/mimo/${cluster}/v1/${path}`);
+    }
+    expect(withLocalProxy("/api/v1/infinite/mimo/token-plan-cn/v1/chat/completions")).toBe("/api/v1/infinite/mimo/token-plan-cn/v1/chat/completions");
+    for (const url of ["https://token-plan-cn.xiaomimimo.com.evil.example/v1/chat/completions", "https://token-plan-cn.xiaomimimo.com/v1/images/generations", "https://key@token-plan-cn.xiaomimimo.com/v1/chat/completions"]) expect(withLocalProxy(url).startsWith("/api/v1/infinite/mimo/")).toBe(false);
+});
+test("standalone deployments preserve direct requests", () => {
+    delete process.env.VITE_IMAGE_API;
+    Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "https://canvas.example" } });
+    useConfigStore.setState({ config: { ...configOriginal, proxyEnabled: false } });
+    expect(withLocalProxy("https://token-plan-cn.xiaomimimo.com/v1/chat/completions")).toBe("https://token-plan-cn.xiaomimimo.com/v1/chat/completions");
+});
+test("same-origin relay errors preserve the server's readable detail", async () => {
+    globalThis.fetch = (async () => Response.json({ detail: "供应商连接失败，请稍后重试" }, { status: 502 })) as typeof fetch;
+    await expect(requestImageQuestion(config, messages, () => {})).rejects.toThrow("HTTP 502：供应商连接失败");
 });
