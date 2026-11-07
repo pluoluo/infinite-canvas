@@ -7,7 +7,7 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
-- 用户确认小米文本接入成功，但输出带聊天说明与 image_gen 伪工具标签。画布 AI 文本现自动追加 GPT Image 2.5 Flare/Sunburst 提示词编写系统约束：仅返回最终正文；明确主体、构图、可见材质/光色，准确引用画面文案与品牌文字，按已有参考编号分配用途，编辑时区分修改与保留项并移除辅助标记；不伪装调用生图工具，不输出聊天结语或 API 参数。简单需求紧凑描述，复杂需求可分短段，不强制堆词或固定字数。用户原自定义系统提示词保留，约束仅用于画布 text 生成配置及重试，不追加到 image/audio/video 配置。新增两项配置测试，前端合计 43 项通过；浏览器核对 Chat/Responses 的 system 注入、用户自定义规则保留、输出正文沿连线进入图片节点且角色说明不混入生图请求。三次文本和一次图片请求全部模拟，无真实模型调用。官方来源：https://developers.openai.com/api/docs/guides/image-prompting?model=gpt-image-2.5 。真实模型是否稳定按要求输出仍待用户重新生成审查。
+- 用户确认小米文本接入成功，但输出带聊天说明与 image_gen 伪工具标签。画布 AI 文本现自动追加 GPT Image 2.5 Flare/Sunburst 提示词编写系统约束：仅返回最终正文；明确主体、构图、可见材质/光色，准确引用画面文案与品牌文字，按已有参考编号分配用途，编辑时区分修改与保留项并移除辅助标记；不伪装调用生图工具，不输出聊天结语或 API 参数。用户确认约束可用后要求更易阅读：默认使用纯文本分段标题，标题与正文换行、段间空一行；按需组织主体与场景、构图与视角、风格与光影、细节与约束，改图分清修改内容和保留内容，只保留相关栏目。分段标题不作为画面文案。不强制堆词或固定字数。用户原自定义系统提示词保留，约束仅用于画布 text 生成配置及重试，不追加到 image/audio/video 配置。新增两项配置测试，前端合计 43 项通过；浏览器核对 Chat/Responses 的 system 注入、用户自定义规则保留、多段正文在节点中以 pre-wrap 显示并刷新恢复，沿连线进入图片请求保留段落，角色说明不混入生图请求。三次文本和一次图片请求全部模拟，无真实模型调用。官方来源：https://developers.openai.com/api/docs/guides/image-prompting?model=gpt-image-2.5 。真实模型是否稳定按要求输出仍待用户重新生成审查。
 
 - 用户反馈小米文本仍报 Failed to fetch。image-api 构建现将小米官方主站与三个 Token Plan 区域的文本和模型列表请求自动改为同源 `/api/v1/infinite/mimo/...`，由当前服务转发，优先于可选的 localhost 本地代理。仅固定官方主机与 models/chat/responses 路径；使用当前请求携带的用户凭据，不落库，不转发 Cookie，不自动重试或更换渠道；独立构建保留原直连逻辑。文本节点全失败时保留具体供应商错误，服务端 detail 也可读。16 项后端相关测试、41 项前端测试与浏览器验收通过；浏览器验证开启不可达 localhost 代理仍走同源、Chat/Responses 均回填、刷新保留及 403 原错误落在节点。使用无效测试凭据 GET 模型列表经服务端收到了小米 401，确认连通；未使用真实密钥或执行真实生成，最终账号/模型权限待用户重试确认。
 
