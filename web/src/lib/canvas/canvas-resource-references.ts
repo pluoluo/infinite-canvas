@@ -52,19 +52,20 @@ export async function resolveCanvasReferenceImages(references: CanvasResourceRef
 
 export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
     const configInputs = expandGroupResourceNodes(getConnectedConfigInputNodes(nodeId, nodes, connections), nodes);
-    if (configInputs.length) return configInputs;
     const ownInputs = expandGroupResourceNodes(getContextInputNodes(nodeId, nodes, connections), nodes);
-    if (ownInputs.length) return ownInputs;
     const node = nodes.find((item) => item.id === nodeId);
-    return node && isResourceNode(node) ? [node] : [];
+    const inputs = configInputs.length ? configInputs : ownInputs.length ? ownInputs : node && isResourceNode(node) ? [node] : [];
+    return withCurrentImage(nodeId, nodes, inputs);
 }
 
 export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
     const configInputs = getConnectedConfigInputNodes(nodeId, nodes, connections);
-    if (configInputs.length) return configInputs;
-    const ownInputs = getContextInputNodes(nodeId, nodes, connections);
-    if (ownInputs.length) return ownInputs;
-    return [];
+    return withCurrentImage(nodeId, nodes, configInputs.length ? configInputs : getContextInputNodes(nodeId, nodes, connections));
+}
+
+function withCurrentImage(nodeId: string, nodes: CanvasNodeData[], inputs: CanvasNodeData[]) {
+    const current = nodes.find((node) => node.id === nodeId);
+    return current?.type === CanvasNodeType.Image && current.metadata?.content ? [current, ...inputs.filter((node) => node.id !== nodeId)] : inputs;
 }
 
 function getContextInputNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
