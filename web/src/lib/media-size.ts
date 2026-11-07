@@ -18,6 +18,18 @@ export const imageSizePresets: Record<string, Record<string, string>> = {
     "4k": { "1:1": "2880x2880", "2:3": "2336x3520", "3:2": "3520x2336", "4:3": "3312x2480", "3:4": "2480x3312", "16:9": "3840x2160", "9:16": "2160x3840", "21:9": "3840x1648", "9:21": "1648x3840" },
 };
 
+// Match the local GPT route's 1,572,864-pixel tier and the upstream's observed
+// ~1.57MP output budget. Other channels retain their own presets.
+export const LOCAL_GPT_1K_MAX_PIXELS = 1536 * 1024;
+const localGptImageSizePresets: typeof imageSizePresets = {
+    ...imageSizePresets,
+    "1k": { "1:1": "1248x1248", "2:3": "1024x1536", "3:2": "1536x1024", "4:3": "1440x1088", "3:4": "1088x1440", "16:9": "1664x944", "9:16": "944x1664", "21:9": "1920x816", "9:21": "816x1920" },
+};
+
+export function imageSizePresetsForModel(model?: string) {
+    return model?.startsWith("image-api::gpt-image-") ? localGptImageSizePresets : imageSizePresets;
+}
+
 export function parsePixelSize(value: string) {
     const match = String(value || "").match(/^(\d+)x(\d+)$/i);
     if (!match) return null;
@@ -55,15 +67,17 @@ export function normalizeMediaScale(value: string | undefined) {
     return "1k";
 }
 
-export function inferMediaScale(size: string, storedScale?: string) {
+export function inferMediaScale(size: string, storedScale?: string, model?: string) {
     if (storedScale) return normalizeMediaScale(storedScale);
     if (!size || size === "auto") return "auto";
     if (parseAspectRatio(size)) return "auto";
     const pixels = parsePixelSize(size);
     if (!pixels) return "auto";
-    const presetScale = Object.keys(imageSizePresets).find((scale) => Object.values(imageSizePresets[scale]).includes(`${pixels.width}x${pixels.height}`));
+    const presets = imageSizePresetsForModel(model);
+    const presetScale = Object.keys(presets).find((scale) => Object.values(presets[scale]).includes(`${pixels.width}x${pixels.height}`));
     if (presetScale) return presetScale;
     const longSide = Math.max(pixels.width, pixels.height);
+    if (model?.startsWith("image-api::gpt-image-") && pixels.width * pixels.height <= LOCAL_GPT_1K_MAX_PIXELS) return "1k";
     if (longSide >= 3072) return "4k";
     if (longSide >= 1536) return "2k";
     return "1k";
@@ -85,17 +99,17 @@ export function inferMediaRatio(size: string, fallback = "1:1") {
         }, fallback);
 }
 
-export function computeMediaSize(scale: string, ratio: string) {
+export function computeMediaSize(scale: string, ratio: string, model?: string) {
     if (ratio === "auto" || !ratio) return "auto";
     const normalizedScale = normalizeMediaScale(scale);
     if (normalizedScale === "auto") return ratio;
-    return imageSizePresets[normalizedScale][ratio];
+    return imageSizePresetsForModel(model)[normalizedScale][ratio];
 }
 
-export function readMediaDimensions(size: string, scale: string, ratio: string) {
+export function readMediaDimensions(size: string, scale: string, ratio: string, model?: string) {
     const pixels = parsePixelSize(size);
     if (pixels) return pixels;
-    const computed = computeMediaSize(scale === "auto" ? "1k" : scale, ratio === "auto" ? "1:1" : ratio);
+    const computed = computeMediaSize(scale === "auto" ? "1k" : scale, ratio === "auto" ? "1:1" : ratio, model);
     return parsePixelSize(computed) || { width: 0, height: 0 };
 }
 

@@ -246,7 +246,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.imageResolution")} className="mb-4">
-                                        <Select value={inferMediaScale(config.size)} options={imageResolutionOptions} onChange={(scale) => updateConfig("size", computeMediaSize(scale, inferMediaRatio(config.size)))} />
+                                        <Select value={inferMediaScale(config.size, undefined, config.imageModel || config.model)} options={imageResolutionOptions} onChange={(scale) => updateConfig("size", computeMediaSize(scale, inferMediaRatio(config.size), config.imageModel || config.model))} />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.videoResolution")} className="mb-4">
                                         <Select value={parseVideoResolution(config.vquality)} options={videoResolutionOptions} onChange={(value) => updateConfig("vquality", value)} />

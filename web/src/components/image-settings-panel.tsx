@@ -38,10 +38,10 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
-    const selectedScale = inferMediaScale(activeSize);
+    const selectedScale = inferMediaScale(activeSize, undefined, config.model);
     const selectedRatio = inferMediaRatio(activeSize);
-    const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
-    const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio));
+    const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio, config.model);
+    const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio, config.model));
     const selectScale = (scale: string) => applySize(scale, selectedRatio === "auto" ? "1:1" : selectedRatio);
     const selectRatio = (ratio: string) => applySize(selectedScale, ratio);
     const updateDimension = (key: "width" | "height", value: number | null) => {
@@ -166,8 +166,8 @@ export function imageQualityLabel(value: string) {
     return qualityOptions.some((item) => item.value === value) ? i18n.t(`settingsPanels.common.${value}`) : value;
 }
 
-export function imageSizeLabel(size: string) {
-    const scale = inferMediaScale(size);
+export function imageSizeLabel(size: string, model?: string) {
+    const scale = inferMediaScale(size, undefined, model);
     const ratio = inferMediaRatio(size);
     if (ratio === "auto" || size === "auto") return i18n.t("settingsPanels.common.auto");
     if (scale === "auto") return ratio;

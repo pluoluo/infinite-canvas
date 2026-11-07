@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
-import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
+import { imageSizePresets, imageSizePresetsForModel, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
 import { requestChatCompletions } from "./chat-completions";
 import { isImageApiChannel, requestImageApi, type ImageApiLifecycle } from "./image-api";
@@ -122,10 +122,10 @@ function normalizeBackground(background: string | undefined) {
     return background?.trim().toLowerCase() === "transparent" ? "transparent" : undefined;
 }
 
-/** Map a bare ratio such as "1:1" to an explicit pixel dimension like "1024x1024". */
-function resolveSize(ratio: string): string {
+/** Map a bare ratio to the selected model's explicit 1K pixel preset. */
+function resolveSize(ratio: string, model?: string): string {
     const parsedRatio = parseImageRatio(ratio);
-    const preset = imageSizePresets["1k"][ratio];
+    const preset = imageSizePresetsForModel(model)["1k"][ratio];
     if (preset) return preset;
     const isLandscape = parsedRatio.width >= parsedRatio.height;
     const longRatio = isLandscape ? parsedRatio.width / parsedRatio.height : parsedRatio.height / parsedRatio.width;
@@ -167,7 +167,7 @@ function validateImageSize(width: number, height: number) {
     if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error(apiText("imagePixelLimit"));
 }
 
-function resolveRequestSize(size: string) {
+function resolveRequestSize(size: string, model?: string) {
     const value = size.trim();
     if (!value || value.toLowerCase() === "auto") return undefined;
     const dimensions = parseImageDimensions(value);
@@ -175,7 +175,7 @@ function resolveRequestSize(size: string) {
         validateImageSize(dimensions.width, dimensions.height);
         return `${dimensions.width}x${dimensions.height}`;
     }
-    if (value.includes(":")) return resolveSize(value);
+    if (value.includes(":")) return resolveSize(value, model);
     throw new Error(apiText("invalidImageSizeFormat"));
 }
 
@@ -837,7 +837,7 @@ async function requestLocalImages(config: AiConfig, requestConfig: AiConfig, pro
         return await requestImageApi({
             sub_model: requestConfig.model,
             prompt: withSystemPrompt(requestConfig, prompt),
-            size: resolveRequestSize(config.size),
+            size: resolveRequestSize(config.size, config.model || config.imageModel),
             n: Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1))),
             quality: normalizeQuality(config.quality),
             background: normalizeBackground(config.background),
