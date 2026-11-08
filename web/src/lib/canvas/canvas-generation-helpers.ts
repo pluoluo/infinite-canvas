@@ -1,4 +1,4 @@
-import { CANVAS_IMAGE_PROMPT_SYSTEM_PROMPT } from "@/lib/canvas/canvas-image-prompt";
+import { CANVAS_IMAGE_PROMPT_SYSTEM_PROMPT, CANVAS_TEXT_EDIT_SYSTEM_PROMPT } from "@/lib/canvas/canvas-image-prompt";
 import { defaultConfig, resolveModelForCapability, type AiConfig } from "@/stores/use-config-store";
 import i18n from "@/i18n";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
@@ -104,10 +104,13 @@ export function getInputSummary(inputs: NodeGenerationInput[]) {
 }
 
 export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
+    const textPolicy = node?.type === CanvasNodeType.Text && node.metadata?.content?.trim()
+        ? CANVAS_TEXT_EDIT_SYSTEM_PROMPT
+        : CANVAS_IMAGE_PROMPT_SYSTEM_PROMPT;
     return {
         ...config,
         model: resolveModelForCapability(config, node?.metadata?.model, mode),
-        systemPrompt: mode === "text" ? [config.systemPrompt.trim(), CANVAS_IMAGE_PROMPT_SYSTEM_PROMPT].filter(Boolean).join("\n\n") : config.systemPrompt,
+        systemPrompt: mode === "text" ? [config.systemPrompt.trim(), textPolicy].filter(Boolean).join("\n\n") : config.systemPrompt,
         reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
         quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
         size: node?.metadata?.size || config.size || defaultConfig.size,

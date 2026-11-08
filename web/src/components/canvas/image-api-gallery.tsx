@@ -23,7 +23,10 @@ export function ImageApiGallery({ onInsert }: { onInsert?: (payload: InsertAsset
         setError("");
         void readImageApiGallery(page, PAGE_SIZE, keyword)
             .then((data) => {
-                if (active) setResult(data);
+                if (active) {
+                    setResult(data);
+                    if (page > 1 && (page - 1) * PAGE_SIZE >= data.total) setPage(Math.max(1, Math.ceil(data.total / PAGE_SIZE)));
+                }
             })
             .catch((failure) => {
                 if (active) setError(String(failure));
@@ -35,6 +38,11 @@ export function ImageApiGallery({ onInsert }: { onInsert?: (payload: InsertAsset
             active = false;
         };
     }, [page, keyword, refresh]);
+    useEffect(() => {
+        const refreshGallery = () => setRefresh((value) => value + 1);
+        window.addEventListener("focus", refreshGallery);
+        return () => window.removeEventListener("focus", refreshGallery);
+    }, []);
     const importImage = async (image: GalleryImage, insert: boolean) => {
         setImporting(image.id);
         try {
@@ -49,6 +57,7 @@ export function ImageApiGallery({ onInsert }: { onInsert?: (payload: InsertAsset
     };
     return (
         <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><a href="/gallery" target="_blank" rel="noopener noreferrer" className="text-sm underline">管理图库</a></div>
             <p className="text-sm text-muted-foreground">导入到“我的资产”后，即可在画布和工作台使用。</p>
             <Modal title="生成时使用的参考图" open={Boolean(inputImage)} onCancel={() => setInputImage(null)} footer={null} width={720} destroyOnHidden>
                 <p className="mb-4 text-sm text-muted-foreground">按提交顺序保存原图；下载和插入不会重新生成。</p>

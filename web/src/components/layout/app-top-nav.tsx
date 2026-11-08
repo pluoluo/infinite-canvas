@@ -39,13 +39,15 @@ export function AppTopNav() {
                     <div className="mx-auto flex h-full max-w-7xl flex-wrap items-stretch justify-between gap-x-5 px-4 md:flex-nowrap md:px-6">
                         <div className="flex h-14 min-w-0 items-center">
                             <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                <span
+                                {import.meta.env.VITE_IMAGE_API === "1" ? (
+                                    <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="size-5 shrink-0" />
+                                ) : <span
                                     className="size-5 shrink-0 bg-current"
                                     style={{
                                         mask: `url(${import.meta.env.BASE_URL}logo.svg) center / contain no-repeat`,
                                         WebkitMask: `url(${import.meta.env.BASE_URL}logo.svg) center / contain no-repeat`,
                                     }}
-                                />
+                                />}
                                 <span className="text-base font-medium">{t("meta.title")}</span>
                             </Link>
 

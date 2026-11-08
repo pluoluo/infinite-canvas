@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { App, Modal, Segmented, Tooltip } from "antd";
-import { Download, Ellipsis, FolderPlus, Image as ImageIcon, Info, MessageSquare, Minus, Music2, Plus, RefreshCw, Settings2, Sparkles, Trash2, Ungroup, Upload, Video } from "lucide-react";
+import { Download, Ellipsis, FolderPlus, Image as ImageIcon, Info, MessageSquare, Minus, Music2, Plus, RefreshCw, Settings2, Sparkles, Square, WandSparkles, Trash2, Ungroup, Upload, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
+import { textPromptForOptimization } from "@/lib/canvas/canvas-text-optimization";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { formatBytes, getDataUrlByteSize } from "@/lib/image-utils";
 import { useCopyText } from "@/hooks/use-copy-text";
@@ -22,6 +23,8 @@ type CanvasNodeHoverToolbarProps = {
     onDecreaseFont: (node: CanvasNodeData) => void;
     onIncreaseFont: (node: CanvasNodeData) => void;
     onToggleDialog: (node: CanvasNodeData) => void;
+    onOptimizeText: (node: CanvasNodeData) => void;
+    isOptimizingText?: boolean;
     onGenerateImage: (node: CanvasNodeData) => void;
     onUpload: (node: CanvasNodeData) => void;
     onDownload: (node: CanvasNodeData) => void;
@@ -51,6 +54,7 @@ type ToolbarTool = {
     onClick: () => void;
     active?: boolean;
     danger?: boolean;
+    disabled?: boolean;
 };
 
 export function CanvasNodeHoverToolbar({
@@ -63,6 +67,8 @@ export function CanvasNodeHoverToolbar({
     onIncreaseFont,
     onToggleDialog,
     onGenerateImage,
+    onOptimizeText,
+    isOptimizingText = false,
     onUpload,
     onDownload,
     onSaveAsset,
@@ -154,8 +160,9 @@ export function CanvasNodeHoverToolbar({
         ...(hasImage || hasVideo || hasAudio ? [{ id: "download", title: t(hasAudio ? "canvas.nodeToolbar.downloadAudio" : hasVideo ? "canvas.nodeToolbar.downloadVideo" : "canvas.nodeToolbar.downloadImage"), label: t("common.download"), icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
         ...(isVideo ? [{ id: "edit", title: t("common.edit"), label: t("common.edit"), icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
         ...(isText ? [
-            { id: "generateText", title: t("canvas.promptPanel.aiTextTitle"), label: t("canvas.nodeToolbar.aiText"), icon: <Sparkles className="size-4" />, onClick: () => onToggleDialog(node) },
-            { id: "generateImage", title: t("canvas.nodeToolbar.generateImage"), label: t("canvas.nodeToolbar.generateImage"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) },
+            { id: "generateText", title: t("canvas.promptPanel.aiTextTitle"), label: t("canvas.nodeToolbar.aiText"), icon: <Sparkles className="size-4" />, onClick: () => onToggleDialog(node), disabled: isOptimizingText },
+            { id: "optimizeText", title: t(isOptimizingText ? "canvas.nodeToolbar.stopOptimizingTitle" : "canvas.nodeToolbar.optimizePrompt"), label: t(isOptimizingText ? "canvas.nodeToolbar.stopOptimizing" : "canvas.nodeToolbar.optimize"), icon: isOptimizingText ? <Square className="size-4" /> : <WandSparkles className="size-4" />, onClick: () => onOptimizeText(node), active: isOptimizingText, disabled: !isOptimizingText && (!textPromptForOptimization(node).trim() || node.metadata?.status === "loading") },
+            { id: "generateImage", title: t("canvas.nodeToolbar.generateImage"), label: t("canvas.nodeToolbar.generateImage"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node), disabled: isOptimizingText },
         ] : []),
         ...(isConfig ? [{ id: "config", title: t("canvas.configNode.title"), label: t("canvas.configNode.title"), icon: <Settings2 className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
         ...(isText ? [{ id: "decreaseFont", title: t("canvas.nodeToolbar.decreaseFont"), label: t("canvas.nodeToolbar.zoomOut"), icon: <Minus className="size-4" />, onClick: () => onDecreaseFont(node) }] : []),
@@ -193,7 +200,7 @@ export function CanvasNodeHoverToolbar({
     return (
         <>
             <div
-                className="absolute z-[70] flex h-12 -translate-x-1/2 -translate-y-full items-center overflow-visible rounded-[18px] border border-black/10 bg-white text-[15px] text-[#242529] shadow-[0_8px_28px_rgba(15,23,42,.12)]"
+                className="absolute z-[70] flex h-10 -translate-x-1/2 -translate-y-full items-center overflow-visible rounded-[14px] border border-black/10 bg-white text-sm text-[#242529] shadow-[0_8px_28px_rgba(15,23,42,.12)]"
                 data-node-toolbar={node.id}
                 style={{ left, top }}
                 onMouseEnter={() => onKeep(node.id)}
@@ -296,12 +303,12 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
     );
 }
 
-function ToolbarAction({ title, label, icon, onClick, showLabel, active = false, danger = false }: ToolbarTool & { showLabel: boolean }) {
+function ToolbarAction({ title, label, icon, onClick, showLabel, active = false, danger = false, disabled = false }: ToolbarTool & { showLabel: boolean }) {
     const hasText = showLabel && Boolean(label);
     return (
         <Tooltip title={title} placement="top" mouseEnterDelay={0.2} color="#ffffff" styles={{ root: { color: "#242529", boxShadow: "0 8px 24px rgba(15,23,42,.16)", fontSize: 13, fontWeight: 500 } }}>
-            <button type="button" className={`group relative flex h-12 items-center whitespace-nowrap px-1.5 ${danger ? "text-[#ef4444]" : ""}`} onClick={onClick} aria-label={title}>
-                <span className={`flex h-9 items-center ${hasText ? "gap-2 px-2.5" : "justify-center px-2"} rounded-lg transition group-hover:bg-[#f0f0f1] ${active ? "bg-[#eeeeef]" : ""}`}>
+            <button type="button" className={`group relative flex h-10 items-center whitespace-nowrap px-1 disabled:cursor-not-allowed disabled:opacity-40 ${danger ? "text-[#ef4444]" : ""}`} onClick={onClick} aria-label={title} disabled={disabled}>
+                <span className={`flex h-8 items-center ${hasText ? "gap-1.5 px-2" : "justify-center px-1.5"} rounded-lg transition group-hover:bg-[#f0f0f1] ${active ? "bg-[#eeeeef]" : ""}`}>
                     {icon}
                     {hasText ? <span>{label}</span> : null}
                 </span>

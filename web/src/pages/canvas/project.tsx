@@ -6,6 +6,7 @@ import { Group, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
+import { applyOptimizedText, buildTextOptimizationConfig, textPromptForOptimization } from "@/lib/canvas/canvas-text-optimization";
 import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
 import { isImageApiChannel, waitForImageApiTask, type ImageApiTaskHandle } from "@/services/api/image-api";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
@@ -291,6 +292,12 @@ function InfiniteCanvasPage() {
     const connectionTargetNodeIdRef = useRef(connectionTargetNodeId);
     const selectionBoxRef = useRef(selectionBox);
     const pendingConnectionCreateRef = useRef(pendingConnectionCreate);
+    const optimizationRequestsRef = useRef(new Map<string, AbortController>());
+    const [optimizingNodeIds, setOptimizingNodeIds] = useState<Set<string>>(new Set());
+    useEffect(() => {
+        setOptimizingNodeIds(new Set());
+        return () => { optimizationRequestsRef.current.forEach(controller => controller.abort()); optimizationRequestsRef.current.clear(); };
+    }, [projectId]);
     const generationRequestsRef = useRef(new Map<string, CanvasGenerationRequest>());
     const videoPollIdsRef = useRef(new Set<string>());
 
@@ -2504,6 +2511,40 @@ function InfiniteCanvasPage() {
         setContextMenu(null);
     }, []);
 
+    const optimizeTextPrompt = useCallback(async (target: CanvasNodeData) => {
+        const pending = optimizationRequestsRef.current.get(target.id);
+        if (pending) { pending.abort(); return; }
+        const sourceNode = nodesRef.current.find(node => node.id === target.id);
+        if (!sourceNode || sourceNode.type !== CanvasNodeType.Text || sourceNode.metadata?.status === NODE_STATUS_LOADING) return;
+        const source = textPromptForOptimization(sourceNode);
+        if (!source.trim()) return;
+        if (generationRequestsRef.current.has(target.id)) { message.info("该节点正在生成，请完成后再优化"); return; }
+        const config = buildTextOptimizationConfig(effectiveConfig, sourceNode);
+        if (!isAiConfigReady(config, config.model)) { openConfigDialog(false); return; }
+        const controller = new AbortController();
+        optimizationRequestsRef.current.set(target.id, controller);
+        setDialogNodeId(current => current === target.id ? null : current);
+        setOptimizingNodeIds(current => new Set([...current, target.id]));
+        try {
+            const answer = await requestImageQuestion(config, [{ role: "user", content: source }], () => {}, { signal: controller.signal });
+            if (controller.signal.aborted || optimizationRequestsRef.current.get(target.id) !== controller) return;
+            const current = nodesRef.current.find(node => node.id === target.id);
+            if (!current) return;
+            if (answer.trim() === t("apiErrors.noContent")) throw new Error("文本模型未返回优化结果，原文已保留");
+            const optimized = applyOptimizedText(current, source, answer, sourceNode.metadata?.primaryTextId);
+            if (textPromptForOptimization(optimized) === source) { message.info("提示词已清晰，无需修改"); return; }
+            setNodes(nodes => nodes.map(node => node.id === target.id && textPromptForOptimization(node) === source && node.metadata?.primaryTextId === sourceNode.metadata?.primaryTextId ? applyOptimizedText(node, source, answer, sourceNode.metadata?.primaryTextId) : node));
+            message.success("提示词已轻量优化，可撤销恢复原文");
+        } catch (error) {
+            if (!controller.signal.aborted) message.error(error instanceof Error ? error.message : "优化失败，原文已保留");
+        } finally {
+            if (optimizationRequestsRef.current.get(target.id) === controller) {
+                optimizationRequestsRef.current.delete(target.id);
+                setOptimizingNodeIds(current => { const next = new Set(current); next.delete(target.id); return next; });
+            }
+        }
+    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog, t]);
+
     const handleGenerateNode = useCallback(
         async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => {
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
@@ -3510,6 +3551,8 @@ function InfiniteCanvasPage() {
                     onDecreaseFont={(node) => handleFontSizeChange(node.id, Math.max(10, (node.metadata?.fontSize || 14) - 2))}
                     onIncreaseFont={(node) => handleFontSizeChange(node.id, Math.min(32, (node.metadata?.fontSize || 14) + 2))}
                     onToggleDialog={(node) => setDialogNodeId((current) => (current === node.id ? null : node.id))}
+                    onOptimizeText={node => void optimizeTextPrompt(node)}
+                    isOptimizingText={Boolean(toolbarNode && optimizingNodeIds.has(toolbarNode.id))}
                     onGenerateImage={generateImageFromTextNode}
                     onUpload={(node) => handleUploadRequest(node.id)}
                     onDownload={downloadNodeImage}

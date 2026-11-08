@@ -46,6 +46,18 @@ export default defineConfig({
             "@": resolve(webDir, "src"),
         },
     },
+    build: process.env.VITE_IMAGE_API === "1" ? {
+        rollupOptions: {
+            input: {
+                main: resolve(webDir, "index.html"),
+                "legacy-gallery-assets": resolve(webDir, "src/services/legacy-gallery-assets.ts"),
+            },
+            preserveEntrySignatures: "strict",
+            output: {
+                entryFileNames: (chunk) => chunk.name === "legacy-gallery-assets" ? "legacy-gallery-assets.js" : "assets/[name]-[hash].js",
+            },
+        },
+    } : undefined,
     define: {
         __APP_VERSION__: JSON.stringify(localVersion),
         __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
