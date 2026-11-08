@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Empty, Input, Modal, Popconfirm, Select, Spin, Tag } from "antd";
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronRight, Download, Eye, EyeOff, Maximize2, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Pencil, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
+import {  Check, ChevronRight, Download, Eye, EyeOff, Maximize2, FileText, Image as ImageIcon, LayoutGrid, ListChecks, Music2, Plus, Pencil, Rows3, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
@@ -13,11 +12,13 @@ import { cn } from "@/lib/utils";
 import { LocalPromptEditor } from "@/components/prompts/local-prompt-editor";
 import { LOCAL_PROMPT_CATEGORY, LOCAL_PROMPT_SOURCE_ID, useLocalPromptStore } from "@/stores/use-local-prompt-store";
 import { PromptDetailDialog } from "@/pages/prompts/components/prompt-detail-dialog";
-import { fetchSourcePrompts, type Prompt } from "@/services/api/prompts";
+import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
 import { uploadMediaFile } from "@/services/file-storage";
 import { previewUrlFor, subscribeImagePreviews, getImagePreviewRevision, uploadImage } from "@/services/image-storage";
 import { useAssetStore, type Asset, type AssetKind } from "@/stores/use-asset-store";
-import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
+import { usePromptList } from "@/components/prompts/use-prompt-list";
+import { PromptImage } from "@/components/prompts/prompt-image";
+import { promptSummary } from "@/services/api/prompt-organization";
 import { CANVAS_SIDE_PANEL_MAX_WIDTH, CANVAS_SIDE_PANEL_MIN_WIDTH, CANVAS_SIDE_PANEL_MOTION_MS, useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
@@ -560,150 +561,68 @@ function AssetCover({ asset }: { asset: Asset }) {
 }
 
 // ---------------------------------------------------------------------------
-// Prompt library tab: collapsible source groups, lazy loading, and copy or text-node insertion actions.
+// Prompt library tab: shared search with category and multi-tag filters.
 // ---------------------------------------------------------------------------
 
 const CanvasPromptsTab = memo(function CanvasPromptsTab({ onInsert, theme }: { onInsert: (payload: InsertAssetPayload) => void; theme: CanvasTheme }) {
     const { message } = App.useApp();
-    const { t } = useTranslation();
-    const sources = usePromptSourceStore((state) => state.sources);
-    const enabledSources = useMemo(() => [{ id: LOCAL_PROMPT_SOURCE_ID, name: LOCAL_PROMPT_CATEGORY }, ...sources.filter((source) => source.enabled)], [sources]);
     const [keyword, setKeyword] = useState("");
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({ [LOCAL_PROMPT_SOURCE_ID]: true });
+    const [category, setCategory] = useState(ALL_PROMPTS_OPTION);
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [editor, setEditor] = useState<Prompt | null>();
-    const removeLocalPrompt = useLocalPromptStore(state => state.remove);
     const [detail, setDetail] = useState<Prompt | null>(null);
-
-    const copyPrompt = async (prompt: string) => {
-        try {
-            await navigator.clipboard.writeText(prompt);
-            message.success(t("canvas.sidePanel.promptCopied"));
-        } catch {
-            message.error(t("canvas.sidePanel.copyFailed"));
-        }
-    };
-
-    const deleteLocalPrompt = async (item: Prompt) => {
-        try { await removeLocalPrompt(item.id); if (detail?.id === item.id) setDetail(null); message.success("已删除本地提示词"); }
+    const remove = useLocalPromptStore(state => state.remove);
+    // Keep category tag options available while selected-tag results refresh.
+    const { query: facetQuery, categories, tags } = usePromptList({ keyword, tags: [], category });
+    const { query, items, total } = usePromptList({ keyword, tags: selectedTags, category });
+    const filterTags = [...new Set([...tags.filter(tag => tag !== ALL_PROMPTS_OPTION), ...selectedTags])];
+    const deletePrompt = async (item: Prompt) => {
+        try { await remove(item.id); if (detail?.id === item.id) setDetail(null); message.success("已删除本地提示词"); }
         catch (error) { message.error(error instanceof Error ? error.message : "删除失败，请重试"); }
     };
-
-    return (
-        <div className="flex h-full flex-col" data-canvas-prompt-library>
-            <div className="px-3 pb-2.5 pt-1">
-                <Input size="small" allowClear prefix={<Search className="size-3.5 text-stone-400" />} placeholder={t("canvas.sidePanel.searchPrompts")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
-                <button type="button" className="mt-2 flex items-center gap-1.5 rounded px-1 py-1 text-xs opacity-75 hover:opacity-100" onClick={() => setEditor(null)}><Plus className="size-3.5" />新增本地提示词</button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-                <div className="space-y-1">
-                    {enabledSources.length ? enabledSources.map((source) => (
-                        <PromptSourceGroup
-                            key={source.id}
-                            sourceId={source.id}
-                            sourceName={source.name}
-                            keyword={keyword}
-                            open={!!expanded[source.id]}
-                            theme={theme}
-                            onToggle={() => setExpanded((prev) => ({ ...prev, [source.id]: !prev[source.id] }))}
-                            onInsert={onInsert}
-                            onView={setDetail}
-                            onEdit={source.id === LOCAL_PROMPT_SOURCE_ID ? setEditor : undefined}
-                            onDelete={source.id === LOCAL_PROMPT_SOURCE_ID ? deleteLocalPrompt : undefined}
-                        />
-                    )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.sidePanel.noPrompts")} className="pt-12" />}
+    return <div className="flex h-full flex-col" data-canvas-prompt-library>
+        <div className="space-y-2 px-3 pb-3 pt-1" data-canvas-no-zoom>
+            <Input size="small" allowClear prefix={<Search className="size-3.5" />} placeholder="搜索主题、中文或原文" value={keyword} onChange={event => setKeyword(event.target.value)} />
+            <Select aria-label="提示词用途" size="small" className="w-full" value={category} onChange={value => { setCategory(value); setSelectedTags([]); }} options={categories.map(value => ({ value, label: value === ALL_PROMPTS_OPTION ? "全部用途" : value }))} />
+            <div className="space-y-1.5">
+                <div className="text-xs opacity-70">标签（可多选）</div>
+                <div role="group" aria-label="提示词标签" className="thin-scrollbar flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+                    {[ALL_PROMPTS_OPTION, ...filterTags].map(tag => {
+                        const active = tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag);
+                        return <button
+                            key={tag}
+                            type="button"
+                            aria-pressed={active}
+                            className="min-h-7 max-w-full rounded px-2 py-1 text-left text-xs leading-4 break-words transition-colors hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-[-1px] dark:hover:bg-white/10"
+                            style={{ background: active ? theme.toolbar.activeBg : undefined, color: active ? theme.toolbar.activeText : theme.node.text, outlineColor: theme.node.activeStroke }}
+                            onClick={() => setSelectedTags(current => tag === ALL_PROMPTS_OPTION ? [] : current.includes(tag) ? current.filter(value => value !== tag) : [...current, tag])}
+                        >{tag === ALL_PROMPTS_OPTION ? "全部" : tag}</button>;
+                    })}
                 </div>
+                {filterTags.length === 0 ? <p className="text-xs opacity-60">{facetQuery.isLoading ? "正在加载标签…" : "当前分类暂无匹配标签"}</p> : null}
             </div>
-            <LocalPromptEditor open={editor !== undefined} prompt={editor} onClose={() => setEditor(undefined)} onSaved={() => { setExpanded(prev => ({ ...prev, [LOCAL_PROMPT_SOURCE_ID]: true })); setKeyword(""); }} />
-            <PromptDetailDialog prompt={detail} onClose={() => setDetail(null)} onCopy={(prompt) => void copyPrompt(prompt)} />
+            <div className="flex items-center justify-between gap-2 text-xs"><span className="opacity-60">{total} 条 · 重复来源已合并</span><button type="button" className="flex items-center gap-1 py-1 hover:opacity-75" onClick={() => setEditor(null)}><Plus className="size-3.5" />新增提示词</button></div>
         </div>
-    );
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+            {query.isLoading ? <div className="py-8 text-center"><Spin size="small" /></div> : null}
+            {query.isError ? <button type="button" onClick={() => void query.refetch()} className="w-full py-6 text-xs">加载失败，点击重试</button> : null}
+            {items.map(item => <PromptRow key={`${item.sourceId}:${item.id}`} item={item} theme={theme} onInsert={() => onInsert({ kind: "text", content: item.prompt, title: item.title })} onView={() => setDetail(item)} onEdit={item.sourceId === LOCAL_PROMPT_SOURCE_ID ? () => setEditor(item) : undefined} onDelete={item.sourceId === LOCAL_PROMPT_SOURCE_ID ? () => deletePrompt(item) : undefined} />)}
+            {!query.isLoading && !query.isError && !items.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的提示词，试试其他关键词" /> : null}
+            {query.hasNextPage ? <button type="button" className="w-full py-4 text-xs opacity-70" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? "加载中…" : "加载更多提示词"}</button> : null}
+        </div>
+        <LocalPromptEditor open={editor !== undefined} prompt={editor} onClose={() => setEditor(undefined)} onSaved={() => { setCategory(LOCAL_PROMPT_CATEGORY); setSelectedTags([]); setKeyword(""); }} />
+        <PromptDetailDialog prompt={detail} onClose={() => setDetail(null)} onCopy={text => { void navigator.clipboard.writeText(text).then(() => message.success("已复制提示词"), () => message.error("复制失败，请重试")); }} onUse={text => { if (detail) onInsert({ kind: "text", content: text, title: detail.title }); setDetail(null); }} />
+    </div>;
 });
-
-function PromptSourceGroup({
-    sourceId,
-    sourceName,
-    keyword,
-    open,
-    theme,
-    onToggle,
-    onInsert,
-    onView,
-    onEdit,
-    onDelete,
-}: {
-    sourceId: string;
-    sourceName: string;
-    keyword: string;
-    open: boolean;
-    theme: CanvasTheme;
-    onToggle: () => void;
-    onInsert: (payload: InsertAssetPayload) => void;
-    onView: (prompt: Prompt) => void;
-    onEdit?: (prompt: Prompt) => void;
-    onDelete?: (prompt: Prompt) => Promise<void>;
-}) {
-    const { t } = useTranslation();
-    // Cache a source after its first expansion to avoid repeated requests; search results also need the data for counts.
-    const showResults = open || !!keyword.trim();
-    const localRevision = useLocalPromptStore(state => state.revision);
-    const query = useQuery({ queryKey: ["side-panel-prompts", sourceId, sourceId === LOCAL_PROMPT_SOURCE_ID ? localRevision : 0], queryFn: () => fetchSourcePrompts(sourceId), enabled: showResults, staleTime: 1000 * 60 * 60 });
-
-    const filtered = useMemo(() => {
-        const items = query.data || [];
-        const q = keyword.trim().toLowerCase();
-        if (!q) return items;
-        return items.filter((item) => [item.title, item.prompt, ...item.tags].join(" ").toLowerCase().includes(q));
-    }, [query.data, keyword]);
-
-    const insertPrompt = (item: Prompt) => onInsert({ kind: "text", content: item.prompt, title: item.title });
-
-    return (
-        <div data-prompt-source={sourceId}>
-            <button type="button" onClick={onToggle} className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-xs font-semibold opacity-75 transition hover:opacity-100">
-                <ChevronRight className={cn("size-3.5 transition-transform", showResults && "rotate-90")} />
-                <BookOpen className="size-3.5" />
-                <span className="min-w-0 flex-1 truncate">{sourceName}</span>
-                {showResults && query.isSuccess ? <span className="opacity-50">{filtered.length}</span> : null}
-            </button>
-            {showResults ? (
-                <div className="px-1 pb-2 pt-1">
-                    {query.isLoading ? (
-                        <div className="flex justify-center py-6">
-                            <Spin size="small" />
-                        </div>
-                    ) : query.isError ? (
-                        <button type="button" onClick={() => void query.refetch()} className="block w-full py-4 text-center text-xs text-red-500 opacity-80 transition hover:opacity-100">
-                            {t("canvas.sidePanel.loadFailedRetry")}
-                        </button>
-                    ) : filtered.length ? (
-                        <div className="space-y-1.5">
-                            {filtered.map((item) => (
-                                <PromptRow key={item.id} item={item} theme={theme} onInsert={() => insertPrompt(item)} onView={() => onView(item)} onEdit={onEdit ? () => onEdit(item) : undefined} onDelete={onDelete ? () => onDelete(item) : undefined} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="py-4 text-center text-xs opacity-40">{keyword.trim() ? t("canvas.sidePanel.noMatchingPrompts") : t("canvas.sidePanel.sourceEmpty")}</div>
-                    )}
-                </div>
-            ) : null}
-        </div>
-    );
-}
 
 function PromptRow({ item, theme, onInsert, onView, onEdit, onDelete }: { item: Prompt; theme: CanvasTheme; onInsert: () => void; onView: () => void; onEdit?: () => void; onDelete?: () => Promise<void> }) {
     const { t } = useTranslation();
     return (
         <div data-prompt-id={item.id} className="group relative flex items-center gap-2.5 rounded-lg px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5">
-            {item.coverUrl ? (
-                <img src={item.coverUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" loading="lazy" />
-            ) : (
-                <span className="grid size-10 shrink-0 place-items-center rounded-md" style={{ background: theme.node.panel }}>
-                    <FileText className="size-4 opacity-50" />
-                </span>
-            )}
+            <PromptImage src={item.coverUrl} title={item.title} className="size-12 shrink-0 rounded-md object-cover" />
             <button type="button" onClick={onView} className="min-w-0 flex-1 text-left">
                 <div className="truncate text-sm font-medium leading-snug">{item.title}</div>
-                <div className="mt-0.5 truncate text-xs leading-snug opacity-50">{item.prompt}</div>
+                <div className="mt-0.5 truncate text-xs leading-snug opacity-50">{promptSummary(item)}</div>
             </button>
             <div className={onEdit ? "grid shrink-0 grid-cols-2 items-center gap-0.5" : "flex shrink-0 flex-col items-center gap-0.5"}>
                 <button type="button" onClick={onView} className="grid size-6 place-items-center rounded-md opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10" aria-label={t("canvas.sidePanel.viewDetails")} title={t("canvas.sidePanel.viewDetails")}>
@@ -714,8 +633,8 @@ function PromptRow({ item, theme, onInsert, onView, onEdit, onDelete }: { item: 
                     onClick={onInsert}
                     className="grid size-6 place-items-center rounded-md opacity-60 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
                     style={{ color: theme.toolbar.activeText }}
-                    aria-label={t("canvas.sidePanel.inserted")}
-                    title={t("canvas.sidePanel.inserted")}
+                    aria-label="插入原始提示词"
+                    title="插入原始提示词"
                 >
                     <Plus className="size-3.5" />
                 </button>

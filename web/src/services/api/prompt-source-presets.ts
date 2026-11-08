@@ -24,6 +24,7 @@ export function createPromptSource(source?: Partial<PromptSource>): PromptSource
 }
 
 export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
+    ...(import.meta.env.VITE_IMAGE_API === "1" ? [{ id: "prompt-portal", name: "本机 Prompt 模板与案例", url: `/api/v1/infinite/prompt-library/sources/prompt-portal`, homepage: "", enabled: true, builtIn: true }] : []),
     registrySource("banana-prompt-quicker", "Banana Prompt Quicker", "https://glidea.github.io/banana-prompt-quicker/"),
     registrySource("davidwu-gpt-image2-prompts", "DavidWu GPT Image 2", "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts"),
     registrySource("freestylefly-gpt-image-2", "Freestylefly GPT Image 2", "https://github.com/freestylefly/awesome-gpt-image-2"),
@@ -34,5 +35,5 @@ export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
 ];
 
 function registrySource(id: string, name: string, homepage: string): PromptSource {
-    return { id, name, url: `${PROMPT_REGISTRY_SOURCE_BASE}/${id}.json`, homepage, enabled: true, builtIn: true };
+    return { id, name, url: import.meta.env.VITE_IMAGE_API === "1" ? `/api/v1/infinite/prompt-library/sources/${id}` : `${PROMPT_REGISTRY_SOURCE_BASE}/${id}.json`, homepage, enabled: true, builtIn: true };
 }

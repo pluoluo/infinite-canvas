@@ -336,6 +336,7 @@ export default {
     },
     topNav: {
         legacyResult: "旧版生成结果",
+        logs: "日志",
         legacy: "旧版生成",
         openMenu: "打开导航菜单",
         menu: "导航菜单",

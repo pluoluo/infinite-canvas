@@ -12,6 +12,10 @@ export type RawPrompt = {
     preview: string;
     createdAt: string;
     updatedAt: string;
+    promptZh?: string;
+    originalPrompt?: string;
+    canonicalKey?: string;
+    translationLabel?: string;
     author?: string;
     sourceUrl?: string;
     imageMode?: string;
@@ -20,10 +24,11 @@ export type RawPrompt = {
     imageCount?: number;
 };
 
-type RunOptions = { signal?: AbortSignal };
+type RunOptions = { signal?: AbortSignal; refresh?: boolean };
 
 async function fetchSource(source: PromptSource, options?: RunOptions) {
-    const response = await fetch(source.url, { cache: "no-store", signal: options?.signal });
+    const url = options?.refresh && source.url.includes("/api/v1/infinite/prompt-library/sources/") && source.id !== "prompt-portal" ? `${source.url}?refresh=true` : source.url;
+    const response = await fetch(url, { cache: "no-store", signal: options?.signal });
     if (!response.ok) throw new Error(i18n.t("config.promptSources.runtime.requestFailed", { status: response.status }));
     return response.json();
 }
@@ -72,6 +77,10 @@ function normalizeItems(values: unknown[], source: PromptSource) {
             preview: stringValue(record.preview),
             createdAt: stringValue(record.createdAt),
             updatedAt: stringValue(record.updatedAt),
+            promptZh: stringValue(record.promptZh),
+            originalPrompt: stringValue(record.originalPrompt),
+            canonicalKey: stringValue(record.canonicalKey),
+            translationLabel: stringValue(record.translationLabel),
             author: stringValue(record.author),
             sourceUrl: absoluteUrl(source.url, stringValue(record.sourceUrl)),
             imageMode: optionalString(record.imageMode),

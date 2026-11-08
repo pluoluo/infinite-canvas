@@ -336,6 +336,7 @@ export default {
     },
     topNav: {
         legacyResult: "Legacy generation result",
+        logs: "Logs",
         legacy: "Legacy generator",
         openMenu: "Open navigation menu",
         menu: "Navigation menu",
